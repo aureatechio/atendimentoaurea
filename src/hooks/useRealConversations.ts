@@ -41,6 +41,7 @@ export function useRealConversations() {
       const { data, error: fetchError } = await supabase
         .from('conversations')
         .select('*')
+        .not('last_message', 'is', null)
         .order('last_message_at', { ascending: false, nullsFirst: false });
 
       if (fetchError) throw fetchError;
