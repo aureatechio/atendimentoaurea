@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-client-token',
 };
 
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -13,20 +16,8 @@ serve(async (req) => {
   }
 
   try {
-    const clientToken = Deno.env.get('ZAPI_CLIENT_TOKEN');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    // Validate client token if configured
-    if (clientToken) {
-      const requestToken = req.headers.get('x-client-token');
-      if (requestToken !== clientToken) {
-        console.log('❌ Invalid client token received');
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    }
-
     const body = await req.json();
     console.log('📨 Webhook received:', JSON.stringify(body, null, 2));
 
@@ -35,10 +26,10 @@ serve(async (req) => {
 
     switch (type) {
       case 'ReceivedCallback':
-        await handleReceivedMessage(body);
+        await handleReceivedMessage(supabase, body);
         break;
       case 'MessageStatusCallback':
-        await handleMessageStatus(body);
+        await handleMessageStatus(supabase, body);
         break;
       case 'StatusInstanceCallback':
         console.log('📱 Instance status:', body.status);
@@ -64,31 +55,99 @@ serve(async (req) => {
   }
 });
 
-async function handleReceivedMessage(data: any) {
-  const { phone, text, senderName, messageId, momment } = data;
+async function handleReceivedMessage(supabase: any, data: any) {
+  const { phone, text, senderName, messageId, momment, isGroup } = data;
   
-  console.log(`📩 New message from ${senderName} (${phone}): ${text}`);
+  // Ignore group messages for now
+  if (isGroup) {
+    console.log('👥 Ignoring group message');
+    return;
+  }
   
-  // Here you would typically:
-  // 1. Find or create the conversation in database
-  // 2. Store the message
-  // 3. Trigger realtime update
+  // Clean phone number
+  const cleanPhone = phone?.replace('@c.us', '').replace('@g.us', '');
   
-  // For now, just log it
-  const messageData = {
-    phone: phone?.replace('@c.us', ''),
-    senderName,
-    text,
-    messageId,
-    receivedAt: momment || new Date().toISOString(),
-  };
+  if (!cleanPhone || !text) {
+    console.log('⚠️ Missing phone or text in message');
+    return;
+  }
   
-  console.log('💾 Message data:', JSON.stringify(messageData, null, 2));
+  console.log(`📩 New message from ${senderName} (${cleanPhone}): ${text}`);
+  
+  try {
+    // Find or create conversation
+    let { data: conversation, error: convError } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('phone', cleanPhone)
+      .maybeSingle();
+    
+    if (convError) {
+      console.error('❌ Error finding conversation:', convError);
+      throw convError;
+    }
+    
+    if (!conversation) {
+      // Create new conversation
+      const { data: newConv, error: createError } = await supabase
+        .from('conversations')
+        .insert({
+          phone: cleanPhone,
+          name: senderName || cleanPhone,
+          last_message: text,
+          last_message_at: momment || new Date().toISOString(),
+          unread_count: 1,
+        })
+        .select()
+        .single();
+      
+      if (createError) {
+        console.error('❌ Error creating conversation:', createError);
+        throw createError;
+      }
+      
+      conversation = newConv;
+      console.log('✅ Created new conversation:', conversation.id);
+    }
+    
+    // Save the message
+    const { data: message, error: msgError } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversation.id,
+        content: text,
+        sender_type: 'customer',
+        message_id: messageId,
+        status: 'delivered',
+      })
+      .select()
+      .single();
+    
+    if (msgError) {
+      console.error('❌ Error saving message:', msgError);
+      throw msgError;
+    }
+    
+    console.log('✅ Message saved:', message.id);
+    
+  } catch (err) {
+    console.error('❌ Failed to process message:', err);
+  }
 }
 
-async function handleMessageStatus(data: any) {
+async function handleMessageStatus(supabase: any, data: any) {
   const { messageId, status } = data;
   console.log(`📊 Message ${messageId} status: ${status}`);
   
-  // Status can be: PENDING, SENT, RECEIVED, READ, PLAYED
+  // Update message status in database
+  if (messageId) {
+    const { error } = await supabase
+      .from('messages')
+      .update({ status: status.toLowerCase() })
+      .eq('message_id', messageId);
+    
+    if (error) {
+      console.error('❌ Error updating message status:', error);
+    }
+  }
 }
