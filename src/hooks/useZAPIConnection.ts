@@ -17,18 +17,24 @@ export function useZAPIConnection() {
   const checkStatus = useCallback(async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.functions.invoke('zapi-status', {
-        body: {},
-      });
+      const response = await fetch(
+        `https://olifecuguxdfzwuzeaox.supabase.co/functions/v1/zapi-status?action=status`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
-      if (error) {
-        console.error('Error checking Z-API status:', error);
-        setStatus({ connected: false, error: error.message });
-        return;
-      }
-
+      const data = await response.json();
       console.log('Z-API status:', data);
-      setStatus(data);
+      
+      // Treat "already connected" as connected state
+      if (data.error === 'You are already connected.') {
+        setStatus({ connected: true, smartphoneConnected: data.smartphoneConnected });
+      } else {
+        setStatus(data);
+      }
     } catch (err) {
       console.error('Failed to check status:', err);
       setStatus({ connected: false, error: 'Failed to check status' });
