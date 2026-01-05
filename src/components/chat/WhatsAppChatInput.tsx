@@ -10,7 +10,6 @@ import {
   FileText, 
   X, 
   Loader2, 
-  Square,
   Smile,
   Camera,
   Contact,
@@ -55,13 +54,18 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
     if (!message.trim() || sending) return;
     
     setSending(true);
-    await onSendMessage(message.trim());
-    setMessage('');
-    setSending(false);
-    
-    // Reset textarea height
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
+    try {
+      await onSendMessage(message.trim());
+      setMessage('');
+      
+      // Reset textarea height
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+    } catch (error) {
+      toast.error('Erro ao enviar mensagem');
+    } finally {
+      setSending(false);
     }
   };
 
@@ -75,6 +79,12 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>, type: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Validate file size (max 16MB)
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error('Arquivo muito grande. Máximo 16MB');
+      return;
+    }
 
     setAttachOpen(false);
     setUploading(true);
@@ -175,6 +185,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
       }
+      toast.info('Gravação cancelada');
     }
   };
 
@@ -186,29 +197,35 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
 
   if (isRecording) {
     return (
-      <div className="px-4 py-3 bg-[hsl(var(--whatsapp-panel-bg))]">
+      <div className="px-4 py-3 bg-[hsl(var(--whatsapp-panel-bg))] animate-fade-in">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={cancelRecording}
-            className="h-12 w-12 rounded-full text-destructive hover:bg-destructive/10"
+            className="h-12 w-12 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive transition-all active:scale-95"
           >
             <X className="h-6 w-6" />
           </Button>
           
-          <div className="flex-1 flex items-center gap-4 bg-card rounded-full px-6 py-3">
-            <div className="h-3 w-3 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-base font-medium text-foreground">{formatTime(recordingTime)}</span>
+          <div className="flex-1 flex items-center gap-4 bg-card rounded-full px-6 py-3 shadow-sm">
+            <div className="h-3 w-3 rounded-full bg-destructive animate-pulse" />
+            <span className="text-base font-medium text-foreground tabular-nums">{formatTime(recordingTime)}</span>
             <div className="flex-1 h-[4px] bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-[hsl(var(--whatsapp-teal-dark))] animate-pulse" style={{ width: '100%' }} />
+              <div 
+                className="h-full bg-[hsl(var(--whatsapp-teal-dark))] rounded-full"
+                style={{ 
+                  width: `${Math.min((recordingTime / 60) * 100, 100)}%`,
+                  transition: 'width 1s linear'
+                }} 
+              />
             </div>
           </div>
           
           <Button
             onClick={stopRecording}
             size="icon"
-            className="h-12 w-12 rounded-full bg-[hsl(var(--whatsapp-teal-dark))] hover:bg-[hsl(var(--whatsapp-teal-light))]"
+            className="h-12 w-12 rounded-full bg-[hsl(var(--whatsapp-teal-dark))] hover:bg-[hsl(var(--whatsapp-teal-light))] transition-all active:scale-95 shadow-lg"
           >
             <Send className="h-5 w-5" />
           </Button>
@@ -225,7 +242,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
           variant="ghost"
           size="icon"
           disabled={disabled || uploading}
-          className="h-[52px] w-[52px] rounded-full text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))] flex-shrink-0"
+          className="h-[52px] w-[52px] rounded-full text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))] hover:text-foreground transition-all duration-200 flex-shrink-0 active:scale-95"
         >
           <Smile className="h-6 w-6" />
         </Button>
@@ -238,8 +255,8 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
               size="icon"
               disabled={disabled || uploading}
               className={cn(
-                "h-[52px] w-[52px] rounded-full text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))] flex-shrink-0 transition-transform",
-                attachOpen && "rotate-[135deg]"
+                "h-[52px] w-[52px] rounded-full text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))] hover:text-foreground flex-shrink-0 transition-all duration-300 active:scale-95",
+                attachOpen && "rotate-[135deg] text-[hsl(var(--whatsapp-teal-dark))]"
               )}
             >
               {uploading ? (
@@ -253,9 +270,9 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
             side="top" 
             align="start"
             sideOffset={10}
-            className="w-auto p-3 bg-card border-border shadow-lg rounded-2xl"
+            className="w-auto p-4 bg-card border-border shadow-xl rounded-2xl animate-scale-in"
           >
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-5">
               <label className="cursor-pointer group">
                 <input
                   type="file"
@@ -264,10 +281,10 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
                   onChange={(e) => handleFileSelect(e, 'image')}
                 />
                 <div className="flex flex-col items-center gap-2">
-                  <div className="h-[53px] w-[53px] rounded-full bg-[#7F66FF] flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Image className="h-6 w-6 text-white" />
+                  <div className="h-[53px] w-[53px] rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center group-hover:scale-110 group-active:scale-95 transition-transform shadow-lg">
+                    <Image className="h-6 w-6 text-primary-foreground" />
                   </div>
-                  <span className="text-[13px] text-[hsl(var(--whatsapp-time))]">Fotos</span>
+                  <span className="text-[13px] text-[hsl(var(--whatsapp-time))] group-hover:text-foreground transition-colors">Fotos</span>
                 </div>
               </label>
 
@@ -279,10 +296,10 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
                   onChange={(e) => handleFileSelect(e, 'video')}
                 />
                 <div className="flex flex-col items-center gap-2">
-                  <div className="h-[53px] w-[53px] rounded-full bg-[#FF2E74] flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Video className="h-6 w-6 text-white" />
+                  <div className="h-[53px] w-[53px] rounded-full bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center group-hover:scale-110 group-active:scale-95 transition-transform shadow-lg">
+                    <Video className="h-6 w-6 text-primary-foreground" />
                   </div>
-                  <span className="text-[13px] text-[hsl(var(--whatsapp-time))]">Vídeos</span>
+                  <span className="text-[13px] text-[hsl(var(--whatsapp-time))] group-hover:text-foreground transition-colors">Vídeos</span>
                 </div>
               </label>
 
@@ -294,30 +311,30 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
                   onChange={(e) => handleFileSelect(e, 'document')}
                 />
                 <div className="flex flex-col items-center gap-2">
-                  <div className="h-[53px] w-[53px] rounded-full bg-[#5157AE] flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <FileText className="h-6 w-6 text-white" />
+                  <div className="h-[53px] w-[53px] rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center group-hover:scale-110 group-active:scale-95 transition-transform shadow-lg">
+                    <FileText className="h-6 w-6 text-primary-foreground" />
                   </div>
-                  <span className="text-[13px] text-[hsl(var(--whatsapp-time))]">Documento</span>
+                  <span className="text-[13px] text-[hsl(var(--whatsapp-time))] group-hover:text-foreground transition-colors">Documento</span>
                 </div>
               </label>
 
-              <div className="flex flex-col items-center gap-2 opacity-50">
-                <div className="h-[53px] w-[53px] rounded-full bg-[#D3396D] flex items-center justify-center">
-                  <Camera className="h-6 w-6 text-white" />
+              <div className="flex flex-col items-center gap-2 opacity-40 cursor-not-allowed">
+                <div className="h-[53px] w-[53px] rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center">
+                  <Camera className="h-6 w-6 text-primary-foreground" />
                 </div>
                 <span className="text-[13px] text-[hsl(var(--whatsapp-time))]">Câmera</span>
               </div>
 
-              <div className="flex flex-col items-center gap-2 opacity-50">
-                <div className="h-[53px] w-[53px] rounded-full bg-[#0795DC] flex items-center justify-center">
-                  <Contact className="h-6 w-6 text-white" />
+              <div className="flex flex-col items-center gap-2 opacity-40 cursor-not-allowed">
+                <div className="h-[53px] w-[53px] rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+                  <Contact className="h-6 w-6 text-primary-foreground" />
                 </div>
                 <span className="text-[13px] text-[hsl(var(--whatsapp-time))]">Contato</span>
               </div>
 
-              <div className="flex flex-col items-center gap-2 opacity-50">
-                <div className="h-[53px] w-[53px] rounded-full bg-[#02A698] flex items-center justify-center">
-                  <Sticker className="h-6 w-6 text-white" />
+              <div className="flex flex-col items-center gap-2 opacity-40 cursor-not-allowed">
+                <div className="h-[53px] w-[53px] rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center">
+                  <Sticker className="h-6 w-6 text-primary-foreground" />
                 </div>
                 <span className="text-[13px] text-[hsl(var(--whatsapp-time))]">Sticker</span>
               </div>
@@ -326,7 +343,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
         </Popover>
 
         {/* Message input */}
-        <div className="flex-1 bg-card rounded-[8px] flex items-end min-h-[52px]">
+        <div className="flex-1 bg-card rounded-lg flex items-end min-h-[52px] shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-[hsl(var(--whatsapp-teal-dark))]/30">
           <textarea
             ref={textareaRef}
             value={message}
@@ -346,7 +363,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
             onClick={handleSend}
             disabled={sending || disabled}
             size="icon"
-            className="h-[52px] w-[52px] rounded-full bg-[hsl(var(--whatsapp-teal-dark))] hover:bg-[hsl(var(--whatsapp-teal-light))] flex-shrink-0"
+            className="h-[52px] w-[52px] rounded-full bg-[hsl(var(--whatsapp-teal-dark))] hover:bg-[hsl(var(--whatsapp-teal-light))] flex-shrink-0 transition-all duration-200 active:scale-95 shadow-lg hover:shadow-xl"
           >
             {sending ? (
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -360,7 +377,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
             disabled={disabled || uploading}
             size="icon"
             variant="ghost"
-            className="h-[52px] w-[52px] rounded-full text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))] flex-shrink-0"
+            className="h-[52px] w-[52px] rounded-full text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))] hover:text-foreground flex-shrink-0 transition-all duration-200 active:scale-95"
           >
             <Mic className="h-6 w-6" />
           </Button>

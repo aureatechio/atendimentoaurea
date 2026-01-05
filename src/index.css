@@ -1,10 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Design System - WhatsApp Web Exact Theme */
+/* Design System - WhatsApp Web Premium Theme */
 
 @layer base {
   :root {
@@ -193,6 +193,17 @@
   ::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.5);
   }
+
+  /* Focus visible styles */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* Selection */
+  ::selection {
+    background: hsl(var(--primary) / 0.2);
+  }
 }
 
 @layer utilities {
@@ -207,5 +218,27 @@
   
   .scrollbar-hidden::-webkit-scrollbar {
     display: none;
+  }
+
+  /* Glassmorphism */
+  .glass {
+    background: hsl(var(--background) / 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* Interactive states */
+  .interactive {
+    @apply transition-all duration-200 hover:scale-[1.02] active:scale-[0.98];
+  }
+
+  /* Smooth transitions */
+  .smooth {
+    @apply transition-all duration-300 ease-out;
+  }
+
+  /* Tabular numbers for time displays */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
 }
