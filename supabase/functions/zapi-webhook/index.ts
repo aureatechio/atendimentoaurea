@@ -28,6 +28,10 @@ serve(async (req) => {
       case 'MessageStatusCallback':
         await handleMessageStatus(supabase, body);
         break;
+      case 'DeliveryCallback':
+        // Treat delivery callback as "delivered" for the messageId
+        await handleMessageStatus(supabase, { messageId: body.messageId, status: 'RECEIVED' });
+        break;
       case 'StatusInstanceCallback':
         console.log('📱 Instance status:', body.status);
         break;
@@ -191,30 +195,41 @@ async function handleReceivedMessage(supabase: any, data: any) {
 }
 
 async function handleMessageStatus(supabase: any, data: any) {
-  const { messageId, status } = data;
-  console.log(`📊 Message ${messageId} status: ${status}`);
-  
+  const { messageId, ids, status } = data;
+
+  const idsList: string[] = Array.isArray(ids)
+    ? ids
+    : messageId
+      ? [messageId]
+      : [];
+
+  console.log(`📊 Message status: ${status} for ${idsList.length} ids`);
+
   // Map Z-API status to our format
   const statusMap: Record<string, string> = {
-    'PENDING': 'sending',
-    'SENT': 'sent',
-    'RECEIVED': 'delivered',
-    'READ': 'read',
-    'PLAYED': 'read',
+    PENDING: 'sending',
+    SENT: 'sent',
+    RECEIVED: 'delivered',
+    READ: 'read',
+    PLAYED: 'read',
+    READ_BY_ME: 'read',
   };
-  
-  const mappedStatus = statusMap[status] || status.toLowerCase();
-  
-  if (messageId) {
-    const { error } = await supabase
-      .from('messages')
-      .update({ status: mappedStatus })
-      .eq('message_id', messageId);
-    
-    if (error) {
-      console.error('❌ Error updating message status:', error);
-    } else {
-      console.log(`✅ Updated status to: ${mappedStatus}`);
-    }
+
+  const mappedStatus = statusMap[status] || String(status || '').toLowerCase();
+
+  if (idsList.length === 0) {
+    console.log('⚠️ No message ids in status callback');
+    return;
+  }
+
+  const { error } = await supabase
+    .from('messages')
+    .update({ status: mappedStatus })
+    .in('message_id', idsList);
+
+  if (error) {
+    console.error('❌ Error updating message status:', error);
+  } else {
+    console.log(`✅ Updated ${idsList.length} messages to: ${mappedStatus}`);
   }
 }
