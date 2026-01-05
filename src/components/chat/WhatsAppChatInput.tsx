@@ -12,8 +12,9 @@ import {
   Loader2, 
   Smile,
   Camera,
-  Contact,
-  Sticker
+  Users,
+  Sticker,
+  Square
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -102,7 +103,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
         .getPublicUrl(data.path);
 
       await onSendMedia(type, urlData.publicUrl, file.name);
-      toast.success('Mídia enviada!');
+      toast.success('Mídia enviada com sucesso!');
     } catch (err) {
       console.error('Upload error:', err);
       toast.error('Erro ao enviar mídia');
@@ -195,10 +196,20 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Attachment options
+  const attachmentOptions = [
+    { type: 'image', icon: Image, label: 'Fotos', accept: 'image/*', gradient: 'from-violet-500 to-purple-600' },
+    { type: 'video', icon: Video, label: 'Vídeos', accept: 'video/*', gradient: 'from-rose-500 to-pink-600' },
+    { type: 'document', icon: FileText, label: 'Documento', accept: '.pdf,.doc,.docx,.xls,.xlsx,.txt', gradient: 'from-blue-500 to-indigo-600' },
+    { type: 'camera', icon: Camera, label: 'Câmera', disabled: true, gradient: 'from-pink-500 to-rose-600' },
+    { type: 'contact', icon: Users, label: 'Contato', disabled: true, gradient: 'from-cyan-500 to-teal-600' },
+    { type: 'sticker', icon: Sticker, label: 'Figurinha', disabled: true, gradient: 'from-emerald-500 to-green-600' },
+  ];
+
   if (isRecording) {
     return (
-      <div className="px-4 py-3 bg-[hsl(var(--whatsapp-panel-bg))] animate-fade-in">
-        <div className="flex items-center gap-4">
+      <div className="px-4 py-3 bg-[hsl(var(--whatsapp-panel-bg))] border-t border-border/30 animate-fade-in">
+        <div className="flex items-center gap-3">
           <Button
             variant="ghost"
             size="icon"
@@ -208,26 +219,26 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
             <X className="h-6 w-6" />
           </Button>
           
-          <div className="flex-1 flex items-center gap-4 bg-card rounded-full px-6 py-3 shadow-sm">
+          <div className="flex-1 flex items-center gap-4 bg-background rounded-full px-5 py-3 elevation-1">
             <div className="h-3 w-3 rounded-full bg-destructive animate-pulse" />
-            <span className="text-base font-medium text-foreground tabular-nums">{formatTime(recordingTime)}</span>
-            <div className="flex-1 h-[4px] bg-muted rounded-full overflow-hidden">
+            <span className="text-base font-medium text-foreground tabular-nums min-w-[45px]">
+              {formatTime(recordingTime)}
+            </span>
+            <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
               <div 
-                className="h-full bg-[hsl(var(--whatsapp-teal-dark))] rounded-full"
-                style={{ 
-                  width: `${Math.min((recordingTime / 60) * 100, 100)}%`,
-                  transition: 'width 1s linear'
-                }} 
+                className="h-full bg-primary rounded-full transition-all duration-1000 ease-linear"
+                style={{ width: `${Math.min((recordingTime / 60) * 100, 100)}%` }} 
               />
             </div>
+            <span className="text-xs text-muted-foreground">Gravando...</span>
           </div>
           
           <Button
             onClick={stopRecording}
             size="icon"
-            className="h-12 w-12 rounded-full bg-[hsl(var(--whatsapp-teal-dark))] hover:bg-[hsl(var(--whatsapp-teal-light))] transition-all active:scale-95 shadow-lg"
+            className="h-12 w-12 rounded-full bg-primary hover:bg-primary/90 transition-all active:scale-95 fab-shadow"
           >
-            <Send className="h-5 w-5" />
+            <Send className="h-5 w-5 text-primary-foreground" />
           </Button>
         </div>
       </div>
@@ -235,14 +246,14 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
   }
 
   return (
-    <div className="px-4 py-3 bg-[hsl(var(--whatsapp-panel-bg))]">
+    <div className="px-4 py-3 bg-[hsl(var(--whatsapp-panel-bg))] border-t border-border/30">
       <div className="flex items-end gap-2">
         {/* Emoji button */}
         <Button
           variant="ghost"
           size="icon"
           disabled={disabled || uploading}
-          className="h-[52px] w-[52px] rounded-full text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))] hover:text-foreground transition-all duration-200 flex-shrink-0 active:scale-95"
+          className="h-12 w-12 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200 flex-shrink-0 active:scale-95"
         >
           <Smile className="h-6 w-6" />
         </Button>
@@ -255,8 +266,8 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
               size="icon"
               disabled={disabled || uploading}
               className={cn(
-                "h-[52px] w-[52px] rounded-full text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))] hover:text-foreground flex-shrink-0 transition-all duration-300 active:scale-95",
-                attachOpen && "rotate-[135deg] text-[hsl(var(--whatsapp-teal-dark))]"
+                "h-12 w-12 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground flex-shrink-0 transition-all duration-300 active:scale-95",
+                attachOpen && "rotate-[135deg] text-primary"
               )}
             >
               {uploading ? (
@@ -269,81 +280,49 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
           <PopoverContent 
             side="top" 
             align="start"
-            sideOffset={10}
-            className="w-auto p-4 bg-card border-border shadow-xl rounded-2xl animate-scale-in"
+            sideOffset={12}
+            className="w-auto p-5 bg-background border-border elevation-3 rounded-2xl animate-scale-in"
           >
-            <div className="grid grid-cols-3 gap-5">
-              <label className="cursor-pointer group">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => handleFileSelect(e, 'image')}
-                />
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-[53px] w-[53px] rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center group-hover:scale-110 group-active:scale-95 transition-transform shadow-lg">
-                    <Image className="h-6 w-6 text-primary-foreground" />
+            <div className="grid grid-cols-3 gap-6">
+              {attachmentOptions.map((option) => (
+                <label 
+                  key={option.type} 
+                  className={cn(
+                    "cursor-pointer group",
+                    option.disabled && "opacity-40 cursor-not-allowed pointer-events-none"
+                  )}
+                >
+                  {!option.disabled && (
+                    <input
+                      type="file"
+                      accept={option.accept}
+                      className="hidden"
+                      onChange={(e) => handleFileSelect(e, option.type)}
+                    />
+                  )}
+                  <div className="flex flex-col items-center gap-2">
+                    <div className={cn(
+                      "h-14 w-14 rounded-full flex items-center justify-center transition-transform shadow-lg bg-gradient-to-br",
+                      option.gradient,
+                      !option.disabled && "group-hover:scale-110 group-active:scale-95"
+                    )}>
+                      <option.icon className="h-6 w-6 text-white" />
+                    </div>
+                    <span className={cn(
+                      "text-[13px] text-muted-foreground transition-colors font-medium",
+                      !option.disabled && "group-hover:text-foreground"
+                    )}>
+                      {option.label}
+                    </span>
                   </div>
-                  <span className="text-[13px] text-[hsl(var(--whatsapp-time))] group-hover:text-foreground transition-colors">Fotos</span>
-                </div>
-              </label>
-
-              <label className="cursor-pointer group">
-                <input
-                  type="file"
-                  accept="video/*"
-                  className="hidden"
-                  onChange={(e) => handleFileSelect(e, 'video')}
-                />
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-[53px] w-[53px] rounded-full bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center group-hover:scale-110 group-active:scale-95 transition-transform shadow-lg">
-                    <Video className="h-6 w-6 text-primary-foreground" />
-                  </div>
-                  <span className="text-[13px] text-[hsl(var(--whatsapp-time))] group-hover:text-foreground transition-colors">Vídeos</span>
-                </div>
-              </label>
-
-              <label className="cursor-pointer group">
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
-                  className="hidden"
-                  onChange={(e) => handleFileSelect(e, 'document')}
-                />
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-[53px] w-[53px] rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center group-hover:scale-110 group-active:scale-95 transition-transform shadow-lg">
-                    <FileText className="h-6 w-6 text-primary-foreground" />
-                  </div>
-                  <span className="text-[13px] text-[hsl(var(--whatsapp-time))] group-hover:text-foreground transition-colors">Documento</span>
-                </div>
-              </label>
-
-              <div className="flex flex-col items-center gap-2 opacity-40 cursor-not-allowed">
-                <div className="h-[53px] w-[53px] rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center">
-                  <Camera className="h-6 w-6 text-primary-foreground" />
-                </div>
-                <span className="text-[13px] text-[hsl(var(--whatsapp-time))]">Câmera</span>
-              </div>
-
-              <div className="flex flex-col items-center gap-2 opacity-40 cursor-not-allowed">
-                <div className="h-[53px] w-[53px] rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
-                  <Contact className="h-6 w-6 text-primary-foreground" />
-                </div>
-                <span className="text-[13px] text-[hsl(var(--whatsapp-time))]">Contato</span>
-              </div>
-
-              <div className="flex flex-col items-center gap-2 opacity-40 cursor-not-allowed">
-                <div className="h-[53px] w-[53px] rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center">
-                  <Sticker className="h-6 w-6 text-primary-foreground" />
-                </div>
-                <span className="text-[13px] text-[hsl(var(--whatsapp-time))]">Sticker</span>
-              </div>
+                </label>
+              ))}
             </div>
           </PopoverContent>
         </Popover>
 
         {/* Message input */}
-        <div className="flex-1 bg-card rounded-lg flex items-end min-h-[52px] shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-[hsl(var(--whatsapp-teal-dark))]/30">
+        <div className="flex-1 bg-background rounded-3xl flex items-end min-h-[48px] elevation-1 transition-all duration-200 focus-within:elevation-2 focus-within:ring-2 focus-within:ring-primary/20">
           <textarea
             ref={textareaRef}
             value={message}
@@ -352,36 +331,33 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
             placeholder="Digite uma mensagem"
             disabled={disabled || uploading}
             rows={1}
-            className="flex-1 resize-none bg-transparent border-0 focus:ring-0 focus:outline-none text-[15px] text-foreground placeholder:text-[hsl(var(--whatsapp-icon))] px-4 py-[14px] max-h-[150px] leading-[21px]"
-            style={{ minHeight: '52px' }}
+            className="flex-1 resize-none bg-transparent border-0 focus:ring-0 focus:outline-none text-[15px] text-foreground placeholder:text-muted-foreground px-5 py-3 max-h-[150px] leading-5"
+            style={{ minHeight: '48px' }}
           />
         </div>
 
-        {/* Send or Record button */}
-        {message.trim() ? (
-          <Button
-            onClick={handleSend}
-            disabled={sending || disabled}
-            size="icon"
-            className="h-[52px] w-[52px] rounded-full bg-[hsl(var(--whatsapp-teal-dark))] hover:bg-[hsl(var(--whatsapp-teal-light))] flex-shrink-0 transition-all duration-200 active:scale-95 shadow-lg hover:shadow-xl"
-          >
-            {sending ? (
-              <Loader2 className="h-6 w-6 animate-spin" />
-            ) : (
-              <Send className="h-6 w-6" />
-            )}
-          </Button>
-        ) : (
-          <Button
-            onClick={startRecording}
-            disabled={disabled || uploading}
-            size="icon"
-            variant="ghost"
-            className="h-[52px] w-[52px] rounded-full text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))] hover:text-foreground flex-shrink-0 transition-all duration-200 active:scale-95"
-          >
-            <Mic className="h-6 w-6" />
-          </Button>
-        )}
+        {/* Send or Record button - ALWAYS VISIBLE */}
+        <Button
+          onClick={message.trim() ? handleSend : startRecording}
+          disabled={sending || disabled || uploading}
+          size="icon"
+          className={cn(
+            "h-12 w-12 rounded-full flex-shrink-0 transition-all duration-200 active:scale-95 fab-shadow",
+            message.trim() 
+              ? "bg-primary hover:bg-primary/90" 
+              : "bg-primary hover:bg-primary/90"
+          )}
+        >
+          {sending ? (
+            <Loader2 className="h-5 w-5 animate-spin text-primary-foreground" />
+          ) : uploading ? (
+            <Loader2 className="h-5 w-5 animate-spin text-primary-foreground" />
+          ) : message.trim() ? (
+            <Send className="h-5 w-5 text-primary-foreground" />
+          ) : (
+            <Mic className="h-5 w-5 text-primary-foreground" />
+          )}
+        </Button>
       </div>
     </div>
   );
