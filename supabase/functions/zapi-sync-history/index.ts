@@ -61,6 +61,7 @@ serve(async (req) => {
     let synced = 0;
     let totalMessages = 0;
     let errors = 0;
+    let multiDeviceLimited = 0;
 
     // Sync top 10 most recent chats
     for (const chat of individualChats.slice(0, 10)) {
@@ -69,13 +70,28 @@ serve(async (req) => {
         if (!cleanPhone) continue;
 
         const result = await syncConversationMessages(supabase, cleanPhone, limit, zapiHeaders);
-        synced++;
-        totalMessages += result.synced || 0;
-        console.log(`✅ Synced ${result.synced} messages for ${cleanPhone}`);
+        
+        if (result.multiDeviceLimited) {
+          multiDeviceLimited++;
+        } else {
+          synced++;
+          totalMessages += result.synced || 0;
+          console.log(`✅ Synced ${result.synced} messages for ${cleanPhone}`);
+        }
       } catch (err) {
         console.error(`❌ Error syncing chat:`, err);
         errors++;
       }
+    }
+
+    // Build response message
+    let message = '';
+    if (totalMessages > 0) {
+      message = `Sincronizado ${totalMessages} mensagens de ${synced} conversas.`;
+    } else if (multiDeviceLimited > 0) {
+      message = `⚠️ Histórico não disponível (limitação Multi-Device do WhatsApp). Novas mensagens serão sincronizadas automaticamente via webhook.`;
+    } else {
+      message = `Nenhuma mensagem nova encontrada.`;
     }
 
     return new Response(JSON.stringify({ 
@@ -83,8 +99,9 @@ serve(async (req) => {
       synced,
       totalMessages,
       errors,
+      multiDeviceLimited,
       total: individualChats.length,
-      message: `Sincronizado ${totalMessages} mensagens de ${synced} conversas`
+      message
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -116,6 +133,13 @@ async function syncConversationMessages(
 
   if (!messagesResponse.ok) {
     const errorText = await messagesResponse.text();
+    
+    // Handle Multi-Device limitation gracefully
+    if (errorText.includes('multi device') || errorText.includes('Does not work')) {
+      console.log(`⚠️ Multi-Device limitation for ${phone} - skipping (this is expected)`);
+      return { phone, synced: 0, multiDeviceLimited: true };
+    }
+    
     console.error(`❌ Failed to fetch messages for ${phone}:`, messagesResponse.status, errorText);
     throw new Error(`Failed to fetch messages: ${messagesResponse.status}`);
   }
