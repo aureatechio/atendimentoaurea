@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, KeyboardEvent } from 'react';
+import { useState, useRef, useCallback, useEffect, KeyboardEvent } from 'react';
 import { Send, Paperclip, Smile, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,22 +12,40 @@ interface ChatInputProps {
 export function ChatInput({ conversationId }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const sendMessage = useChatStore((state) => state.sendMessage);
   const canSendMessage = useChatStore((state) => state.canSendMessage);
+  const setAgentTyping = useChatStore((state) => state.setAgentTyping);
   
   const { allowed, reason } = canSendMessage(conversationId);
+
+  // Handle typing indicator
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      setAgentTyping(conversationId, false);
+    };
+  }, [conversationId, setAgentTyping]);
 
   const handleSend = useCallback(() => {
     const trimmedMessage = message.trim();
     if (!trimmedMessage || !allowed) return;
+    
+    // Clear typing indicator
+    setAgentTyping(conversationId, false);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
     
     sendMessage(conversationId, trimmedMessage);
     setMessage('');
     
     // Focus back on textarea
     setTimeout(() => textareaRef.current?.focus(), 0);
-  }, [message, allowed, sendMessage, conversationId]);
+  }, [message, allowed, sendMessage, conversationId, setAgentTyping]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // Enter to send, Shift+Enter for new line
@@ -37,7 +55,7 @@ export function ChatInput({ conversationId }: ChatInputProps) {
     }
   };
 
-  // Auto-resize textarea
+  // Auto-resize textarea and handle typing indicator
   const handleInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const textarea = e.target;
     setMessage(textarea.value);
@@ -45,7 +63,24 @@ export function ChatInput({ conversationId }: ChatInputProps) {
     // Reset height to auto to get the correct scrollHeight
     textarea.style.height = 'auto';
     textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
-  }, []);
+    
+    // Typing indicator logic
+    if (textarea.value.trim()) {
+      setAgentTyping(conversationId, true);
+      
+      // Clear previous timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      
+      // Set new timeout to clear typing after 2 seconds of no input
+      typingTimeoutRef.current = setTimeout(() => {
+        setAgentTyping(conversationId, false);
+      }, 2000);
+    } else {
+      setAgentTyping(conversationId, false);
+    }
+  }, [conversationId, setAgentTyping]);
 
   if (!allowed) {
     return (

@@ -3,6 +3,7 @@ import { useChatStore } from '@/stores/chatStore';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { ChatHeader } from './ChatHeader';
+import { TypingIndicator } from './TypingIndicator';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -11,9 +12,11 @@ export function ChatArea() {
   const selectedConversationId = useChatStore((state) => state.selectedConversationId);
   const getSelectedConversation = useChatStore((state) => state.getSelectedConversation);
   const getMessages = useChatStore((state) => state.getMessages);
+  const agentTyping = useChatStore((state) => state.agentTyping);
   
   const conversation = getSelectedConversation();
   const messages = selectedConversationId ? getMessages(selectedConversationId) : [];
+  const isTyping = selectedConversationId ? agentTyping[selectedConversationId] : false;
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -87,6 +90,10 @@ export function ChatArea() {
             />
           );
         })}
+        
+        {/* Typing indicator */}
+        {isTyping && <TypingIndicator />}
+        
         <div ref={messagesEndRef} />
       </div>
 

@@ -12,13 +12,15 @@ interface ChatState {
   filter: ConversationFilter;
   searchQuery: string;
   isSearchOpen: boolean;
-  typingConversations: Set<string>;
+  typingConversations: Set<string>; // conversations where client is typing
+  agentTyping: Record<string, boolean>; // agent typing per conversation
   
   // Actions
   selectConversation: (id: string | null) => void;
   setFilter: (filter: ConversationFilter) => void;
   setSearchQuery: (query: string) => void;
   setSearchOpen: (open: boolean) => void;
+  setAgentTyping: (conversationId: string, isTyping: boolean) => void;
   
   // Message actions
   sendMessage: (conversationId: string, content: string) => void;
@@ -47,6 +49,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   searchQuery: '',
   isSearchOpen: false,
   typingConversations: new Set(),
+  agentTyping: {},
   
   // Actions
   selectConversation: (id) => {
@@ -61,6 +64,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setSearchQuery: (query) => set({ searchQuery: query }),
   
   setSearchOpen: (open) => set({ isSearchOpen: open }),
+  
+  setAgentTyping: (conversationId, isTyping) => {
+    set(state => ({
+      agentTyping: { ...state.agentTyping, [conversationId]: isTyping }
+    }));
+  },
   
   sendMessage: (conversationId, content) => {
     const { canSendMessage, messages, conversations } = get();
