@@ -34,7 +34,14 @@ import {
 export default function RealChat() {
   const { conversations, loading: convLoading, markAsRead, refetch } = useRealConversations();
   const [selectedConversation, setSelectedConversation] = useState<RealConversation | null>(null);
-  const { messages, loading: msgLoading, sendMessage, sendMedia } = useRealMessages(selectedConversation?.id || null);
+  const {
+    messages,
+    loading: msgLoading,
+    error: msgError,
+    sendMessage,
+    sendMedia,
+    refetch: refetchMessages,
+  } = useRealMessages(selectedConversation?.id || null);
   const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -51,6 +58,20 @@ export default function RealChat() {
     }
   }, [showSearch]);
 
+  const handleSelectConversation = (conv: RealConversation) => {
+    setSelectedConversation(conv);
+    if (conv.unread_count > 0) {
+      markAsRead(conv.id);
+    }
+  };
+
+  // Auto-seleciona a primeira conversa (evita estado "parece que sumiu")
+  useEffect(() => {
+    if (!selectedConversation && conversations.length > 0 && !convLoading) {
+      handleSelectConversation(conversations[0]);
+    }
+  }, [conversations, convLoading, selectedConversation]);
+
   const handleSync = async () => {
     setSyncing(true);
     try {
@@ -59,24 +80,17 @@ export default function RealChat() {
         { headers: { 'Content-Type': 'application/json' } }
       );
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success(result.message || 'Sincronizado!');
         refetch();
       } else {
         toast.error(result.error || 'Erro ao sincronizar');
       }
-    } catch (err) {
+    } catch {
       toast.error('Erro ao sincronizar');
     } finally {
       setSyncing(false);
-    }
-  };
-
-  const handleSelectConversation = (conv: RealConversation) => {
-    setSelectedConversation(conv);
-    if (conv.unread_count > 0) {
-      markAsRead(conv.id);
     }
   };
 
@@ -346,9 +360,25 @@ export default function RealChat() {
             </header>
 
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto px-[5%] lg:px-[8%] xl:px-[12%] py-4 scrollbar-thin chat-pattern">
+            <div
+              key={selectedConversation.id}
+              className="flex-1 overflow-y-auto px-[5%] lg:px-[8%] xl:px-[12%] py-4 scrollbar-thin chat-pattern"
+            >
               {msgLoading ? (
                 <MessageListSkeleton />
+              ) : msgError ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="bg-[#182229] rounded-lg px-4 py-3 shadow-sm text-center">
+                    <p className="text-[12.5px] text-[#d1d7db]">{msgError}</p>
+                    <Button
+                      variant="ghost"
+                      className="mt-2 text-[#00a884] hover:bg-[#202c33]"
+                      onClick={refetchMessages}
+                    >
+                      Tentar novamente
+                    </Button>
+                  </div>
+                </div>
               ) : messages.length === 0 ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="bg-[#182229] rounded-lg px-4 py-2 shadow-sm">
