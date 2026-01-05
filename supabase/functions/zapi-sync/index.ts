@@ -81,6 +81,16 @@ serve(async (req) => {
         continue;
       }
 
+      // Parse lastMessageTime - Z-API returns Unix timestamp in seconds
+      let lastMessageAt = new Date().toISOString();
+      if (chat.lastMessageTime) {
+        const timestamp = parseInt(chat.lastMessageTime);
+        // Validate timestamp is reasonable (between 2020 and 2030)
+        if (timestamp > 1577836800 && timestamp < 1893456000) {
+          lastMessageAt = new Date(timestamp * 1000).toISOString();
+        }
+      }
+
       // Create new conversation
       const { error: insertError } = await supabase
         .from('conversations')
@@ -89,9 +99,7 @@ serve(async (req) => {
           name: chat.name || phone,
           avatar_url: chat.profileThumbnail || null,
           unread_count: parseInt(chat.unread) || 0,
-          last_message_at: chat.lastMessageTime 
-            ? new Date(parseInt(chat.lastMessageTime) * 1000).toISOString()
-            : new Date().toISOString(),
+          last_message_at: lastMessageAt,
         });
 
       if (insertError) {
