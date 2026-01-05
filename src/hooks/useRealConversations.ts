@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { playNotificationSound } from '@/lib/notificationSound';
+import { toast } from 'sonner';
 
 export interface RealConversation {
   id: string;
@@ -31,18 +32,22 @@ export interface RealMessage {
 export function useRealConversations() {
   const [conversations, setConversations] = useState<RealConversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const fetchConversations = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      setError(null);
+      const { data, error: fetchError } = await supabase
         .from('conversations')
         .select('*')
-        .order('last_message_at', { ascending: false });
+        .order('last_message_at', { ascending: false, nullsFirst: false });
 
-      if (error) throw error;
+      if (fetchError) throw fetchError;
       setConversations(data || []);
     } catch (err) {
       console.error('Error fetching conversations:', err);
+      setError('Erro ao carregar conversas');
     } finally {
       setLoading(false);
     }
@@ -51,7 +56,12 @@ export function useRealConversations() {
   useEffect(() => {
     fetchConversations();
 
-    const channel = supabase
+    // Cleanup existing channel
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
+
+    channelRef.current = supabase
       .channel('conversations-changes')
       .on(
         'postgres_changes',
@@ -83,14 +93,25 @@ export function useRealConversations() {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error('Realtime channel error');
+        }
+      });
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
     };
   }, [fetchConversations]);
 
   const markAsRead = useCallback(async (conversationId: string) => {
+    // Optimistic update
+    setConversations(prev =>
+      prev.map(c => c.id === conversationId ? { ...c, unread_count: 0 } : c)
+    );
+
     const { error } = await supabase
       .from('conversations')
       .update({ unread_count: 0 })
@@ -98,15 +119,19 @@ export function useRealConversations() {
 
     if (error) {
       console.error('Error marking as read:', error);
+      // Revert on error
+      fetchConversations();
     }
-  }, []);
+  }, [fetchConversations]);
 
-  return { conversations, loading, refetch: fetchConversations, markAsRead };
+  return { conversations, loading, error, refetch: fetchConversations, markAsRead };
 }
 
 export function useRealMessages(conversationId: string | null) {
   const [messages, setMessages] = useState<RealMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const fetchMessages = useCallback(async () => {
     if (!conversationId) {
@@ -115,14 +140,17 @@ export function useRealMessages(conversationId: string | null) {
     }
 
     setLoading(true);
+    setError(null);
+    
     try {
-      const { data, error } = await supabase
+      const { data, error: fetchError } = await supabase
         .from('messages')
         .select('*')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
+      if (fetchError) throw fetchError;
+      
       setMessages((data || []).map(m => ({
         ...m,
         sender_type: m.sender_type as 'customer' | 'agent',
@@ -133,6 +161,7 @@ export function useRealMessages(conversationId: string | null) {
       })));
     } catch (err) {
       console.error('Error fetching messages:', err);
+      setError('Erro ao carregar mensagens');
     } finally {
       setLoading(false);
     }
@@ -143,7 +172,12 @@ export function useRealMessages(conversationId: string | null) {
 
     if (!conversationId) return;
 
-    const channel = supabase
+    // Cleanup existing channel
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
+
+    channelRef.current = supabase
       .channel(`messages-${conversationId}`)
       .on(
         'postgres_changes',
@@ -157,11 +191,19 @@ export function useRealMessages(conversationId: string | null) {
           console.log('Message change:', payload);
           if (payload.eventType === 'INSERT') {
             const newMsg = payload.new as RealMessage;
-            setMessages(prev => [...prev, {
-              ...newMsg,
-              sender_type: newMsg.sender_type as 'customer' | 'agent',
-              message_type: newMsg.message_type || 'text',
-            }]);
+            setMessages(prev => {
+              // Avoid duplicates
+              if (prev.some(m => m.id === newMsg.id)) return prev;
+              return [...prev, {
+                ...newMsg,
+                sender_type: newMsg.sender_type as 'customer' | 'agent',
+                message_type: newMsg.message_type || 'text',
+              }];
+            });
+            // Play sound only for customer messages
+            if (newMsg.sender_type === 'customer') {
+              playNotificationSound();
+            }
           } else if (payload.eventType === 'UPDATE') {
             const updatedMsg = payload.new as RealMessage;
             setMessages(prev => prev.map(m => 
@@ -175,12 +217,17 @@ export function useRealMessages(conversationId: string | null) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
     };
   }, [conversationId, fetchMessages]);
 
   const sendMessage = useCallback(async (content: string) => {
-    if (!conversationId || !content.trim()) return;
+    if (!conversationId || !content.trim()) {
+      toast.error('Mensagem não pode estar vazia');
+      return;
+    }
 
     const { data: conv } = await supabase
       .from('conversations')
@@ -188,7 +235,29 @@ export function useRealMessages(conversationId: string | null) {
       .eq('id', conversationId)
       .single();
 
-    if (!conv) return;
+    if (!conv) {
+      toast.error('Conversa não encontrada');
+      return;
+    }
+
+    // Create optimistic message
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMsg: RealMessage = {
+      id: tempId,
+      conversation_id: conversationId,
+      content: content.trim(),
+      sender_type: 'agent',
+      message_id: null,
+      status: 'sending',
+      created_at: new Date().toISOString(),
+      message_type: 'text',
+      media_url: null,
+      media_mime_type: null,
+      media_caption: null,
+    };
+
+    // Add optimistic message
+    setMessages(prev => [...prev, optimisticMsg]);
 
     const { data: message, error } = await supabase
       .from('messages')
@@ -204,8 +273,21 @@ export function useRealMessages(conversationId: string | null) {
 
     if (error) {
       console.error('Error saving message:', error);
+      toast.error('Erro ao salvar mensagem');
+      // Remove optimistic message
+      setMessages(prev => prev.filter(m => m.id !== tempId));
       return;
     }
+
+    // Replace optimistic message with real one
+    setMessages(prev => prev.map(m => m.id === tempId ? {
+      ...message,
+      sender_type: message.sender_type as 'customer' | 'agent',
+      message_type: message.message_type || 'text',
+      media_url: null,
+      media_mime_type: null,
+      media_caption: null,
+    } : m));
 
     try {
       const response = await fetch(
@@ -223,25 +305,39 @@ export function useRealMessages(conversationId: string | null) {
 
       const result = await response.json();
       
+      const newStatus = result.success ? 'sent' : 'error';
+      
       await supabase
         .from('messages')
         .update({ 
-          status: result.success ? 'sent' : 'error',
+          status: newStatus,
           message_id: result.messageId,
         })
         .eq('id', message.id);
 
+      if (!result.success) {
+        toast.error('Erro ao enviar mensagem');
+      }
     } catch (err) {
       console.error('Error sending message:', err);
       await supabase
         .from('messages')
         .update({ status: 'error' })
         .eq('id', message.id);
+      toast.error('Erro ao enviar mensagem');
     }
   }, [conversationId]);
 
   const sendMedia = useCallback(async (type: string, mediaUrl: string, caption?: string) => {
-    if (!conversationId) return;
+    if (!conversationId) {
+      toast.error('Nenhuma conversa selecionada');
+      return;
+    }
+
+    if (!mediaUrl) {
+      toast.error('URL da mídia inválida');
+      return;
+    }
 
     const { data: conv } = await supabase
       .from('conversations')
@@ -249,14 +345,35 @@ export function useRealMessages(conversationId: string | null) {
       .eq('id', conversationId)
       .single();
 
-    if (!conv) return;
+    if (!conv) {
+      toast.error('Conversa não encontrada');
+      return;
+    }
 
     const contentMap: Record<string, string> = {
-      image: caption || '[Imagem]',
-      audio: '[Áudio]',
-      video: caption || '[Vídeo]',
-      document: `[Documento: ${caption}]`,
+      image: caption || '📷 Imagem',
+      audio: '🎵 Áudio',
+      video: caption || '🎬 Vídeo',
+      document: `📄 ${caption || 'Documento'}`,
     };
+
+    // Create optimistic message
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMsg: RealMessage = {
+      id: tempId,
+      conversation_id: conversationId,
+      content: contentMap[type] || '[Mídia]',
+      sender_type: 'agent',
+      message_id: null,
+      status: 'sending',
+      created_at: new Date().toISOString(),
+      message_type: type,
+      media_url: mediaUrl,
+      media_mime_type: null,
+      media_caption: caption || null,
+    };
+
+    setMessages(prev => [...prev, optimisticMsg]);
 
     const { data: message, error } = await supabase
       .from('messages')
@@ -274,8 +391,20 @@ export function useRealMessages(conversationId: string | null) {
 
     if (error) {
       console.error('Error saving message:', error);
+      toast.error('Erro ao salvar mídia');
+      setMessages(prev => prev.filter(m => m.id !== tempId));
       return;
     }
+
+    // Replace optimistic message
+    setMessages(prev => prev.map(m => m.id === tempId ? {
+      ...message,
+      sender_type: message.sender_type as 'customer' | 'agent',
+      message_type: message.message_type || type,
+      media_url: message.media_url || mediaUrl,
+      media_mime_type: message.media_mime_type,
+      media_caption: message.media_caption,
+    } : m));
 
     try {
       const response = await fetch(
@@ -302,14 +431,18 @@ export function useRealMessages(conversationId: string | null) {
         })
         .eq('id', message.id);
 
+      if (!result.success) {
+        toast.error('Erro ao enviar mídia');
+      }
     } catch (err) {
       console.error('Error sending media:', err);
       await supabase
         .from('messages')
         .update({ status: 'error' })
         .eq('id', message.id);
+      toast.error('Erro ao enviar mídia');
     }
   }, [conversationId]);
 
-  return { messages, loading, sendMessage, sendMedia, refetch: fetchMessages };
+  return { messages, loading, error, sendMessage, sendMedia, refetch: fetchMessages };
 }
