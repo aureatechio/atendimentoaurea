@@ -10,21 +10,21 @@ interface MessageStatus {
 export function MessageStatusIcon({ status, isFromAgent }: MessageStatus) {
   if (!isFromAgent) return null;
 
-  const iconClasses = "h-[15px] w-[15px] flex-shrink-0";
+  const iconClasses = "h-[14px] w-[14px] flex-shrink-0";
 
   switch (status) {
     case 'sending':
-      return <Clock className={cn(iconClasses, "text-muted-foreground animate-pulse-soft")} />;
+      return <Clock className={cn(iconClasses, "text-[#667781] animate-pulse")} />;
     case 'sent':
-      return <Check className={cn(iconClasses, "text-muted-foreground")} />;
+      return <Check className={cn(iconClasses, "text-[#667781]")} />;
     case 'delivered':
-      return <CheckCheck className={cn(iconClasses, "text-muted-foreground")} />;
+      return <CheckCheck className={cn(iconClasses, "text-[#667781]")} />;
     case 'read':
-      return <CheckCheck className={cn(iconClasses, "text-[hsl(var(--status-read))]")} />;
+      return <CheckCheck className={cn(iconClasses, "text-[#53bdeb]")} />;
     case 'error':
-      return <AlertCircle className={cn(iconClasses, "text-destructive")} />;
+      return <AlertCircle className={cn(iconClasses, "text-[#f15c6d]")} />;
     default:
-      return <Check className={cn(iconClasses, "text-muted-foreground")} />;
+      return <Check className={cn(iconClasses, "text-[#667781]")} />;
   }
 }
 
@@ -75,18 +75,9 @@ export function WhatsAppMessageBubble({
     const audio = audioRef.current;
     if (!audio) return;
 
-    const handleLoadedMetadata = () => {
-      setAudioDuration(audio.duration);
-    };
-
-    const handleTimeUpdate = () => {
-      setAudioProgress((audio.currentTime / audio.duration) * 100);
-    };
-
-    const handleEnded = () => {
-      setIsPlaying(false);
-      setAudioProgress(0);
-    };
+    const handleLoadedMetadata = () => setAudioDuration(audio.duration);
+    const handleTimeUpdate = () => setAudioProgress((audio.currentTime / audio.duration) * 100);
+    const handleEnded = () => { setIsPlaying(false); setAudioProgress(0); };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('timeupdate', handleTimeUpdate);
@@ -116,17 +107,17 @@ export function WhatsAppMessageBubble({
     switch (messageType) {
       case 'image':
         return (
-          <div className="mb-1 -mx-2 -mt-1.5 relative group overflow-hidden rounded-t-lg">
+          <div className="mb-1 -mx-2 -mt-1.5 relative overflow-hidden rounded-t-lg">
             {imageLoading && (
-              <div className="absolute inset-0 bg-muted animate-shimmer flex items-center justify-center min-h-[200px]">
-                <ImageIcon className="w-10 h-10 text-muted-foreground" />
+              <div className="absolute inset-0 bg-[#1d282f] flex items-center justify-center min-h-[200px]">
+                <ImageIcon className="w-10 h-10 text-[#8696a0]" />
               </div>
             )}
             {imageError ? (
-              <div className="w-full h-[200px] bg-muted flex items-center justify-center">
-                <div className="text-center text-muted-foreground">
+              <div className="w-full h-[200px] bg-[#1d282f] flex items-center justify-center">
+                <div className="text-center text-[#8696a0]">
                   <ImageIcon className="w-10 h-10 mx-auto mb-2" />
-                  <p className="text-xs font-medium">Erro ao carregar imagem</p>
+                  <p className="text-xs">Erro ao carregar imagem</p>
                 </div>
               </div>
             ) : (
@@ -134,21 +125,17 @@ export function WhatsAppMessageBubble({
                 src={mediaUrl}
                 alt="Imagem"
                 className={cn(
-                  "w-full cursor-pointer transition-all duration-300 rounded-t-lg",
-                  "hover:brightness-95",
+                  "w-full cursor-pointer rounded-t-lg",
                   imageLoading ? "opacity-0" : "opacity-100"
                 )}
                 style={{ maxHeight: '330px', objectFit: 'cover' }}
                 onLoad={() => setImageLoading(false)}
-                onError={() => {
-                  setImageLoading(false);
-                  setImageError(true);
-                }}
+                onError={() => { setImageLoading(false); setImageError(true); }}
                 onClick={() => window.open(mediaUrl, '_blank')}
               />
             )}
             {mediaCaption && (
-              <p className="text-[14px] mt-2 px-1 whitespace-pre-wrap leading-5">{mediaCaption}</p>
+              <p className="text-[14.2px] mt-2 px-1 text-[#e9edef] whitespace-pre-wrap">{mediaCaption}</p>
             )}
           </div>
         );
@@ -156,54 +143,41 @@ export function WhatsAppMessageBubble({
       case 'video':
         return (
           <div className="mb-1 -mx-2 -mt-1.5 rounded-t-lg overflow-hidden">
-            <video
-              src={mediaUrl}
-              controls
-              className="w-full rounded-t-lg"
-              style={{ maxHeight: '330px' }}
-            />
+            <video src={mediaUrl} controls className="w-full rounded-t-lg" style={{ maxHeight: '330px' }} />
             {mediaCaption && (
-              <p className="text-[14px] mt-2 px-1 whitespace-pre-wrap leading-5">{mediaCaption}</p>
+              <p className="text-[14.2px] mt-2 px-1 text-[#e9edef] whitespace-pre-wrap">{mediaCaption}</p>
             )}
           </div>
         );
 
       case 'audio':
         return (
-          <div className="flex items-center gap-3 py-1 min-w-[280px]">
+          <div className="flex items-center gap-3 py-1 min-w-[260px]">
             <button
               onClick={toggleAudio}
-              className={cn(
-                'h-12 w-12 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-200',
-                'hover:scale-105 active:scale-95 fab-shadow',
-                'bg-primary'
-              )}
+              className="h-11 w-11 rounded-full flex items-center justify-center flex-shrink-0 bg-[#00a884] hover:bg-[#00a884]/90 transition-colors"
             >
               {isPlaying ? (
-                <Pause className="h-5 w-5 text-primary-foreground" />
+                <Pause className="h-5 w-5 text-[#111b21]" />
               ) : (
-                <Play className="h-5 w-5 text-primary-foreground ml-0.5" />
+                <Play className="h-5 w-5 text-[#111b21] ml-0.5" />
               )}
             </button>
             <div className="flex-1 flex flex-col gap-1.5">
-              <div className="relative h-1 rounded-full bg-muted-foreground/20 overflow-hidden">
+              <div className="relative h-1 rounded-full bg-[#8696a0]/30 overflow-hidden">
                 <div
-                  className="absolute top-0 left-0 h-full bg-primary rounded-full transition-all duration-100"
+                  className="absolute top-0 left-0 h-full bg-[#8696a0] rounded-full transition-all"
                   style={{ width: `${audioProgress}%` }}
                 />
               </div>
-              <span className="text-[11px] text-muted-foreground tabular-nums">
+              <span className="text-[11px] text-[#8696a0] tabular-nums">
                 {formatAudioTime(isPlaying ? (audioProgress / 100) * audioDuration : audioDuration || 0)}
               </span>
             </div>
-            <div className="h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 bg-muted">
-              <Mic className="h-5 w-5 text-muted-foreground" />
+            <div className="h-9 w-9 rounded-full flex items-center justify-center bg-[#6a7175]">
+              <Mic className="h-4 w-4 text-[#111b21]" />
             </div>
-            <audio
-              ref={audioRef}
-              src={mediaUrl}
-              className="hidden"
-            />
+            <audio ref={audioRef} src={mediaUrl} className="hidden" />
           </div>
         );
 
@@ -213,22 +187,16 @@ export function WhatsAppMessageBubble({
             href={mediaUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className={cn(
-              'flex items-center gap-3 p-3 rounded-lg mb-1 -mx-2 -mt-1.5 transition-all duration-200',
-              'hover:brightness-95 active:scale-[0.99]',
-              'bg-muted/50'
-            )}
+            className="flex items-center gap-3 p-3 rounded-lg mb-1 -mx-2 -mt-1.5 bg-[#1d282f] hover:bg-[#1d282f]/80 transition-colors"
           >
-            <div className="h-12 w-10 rounded-md flex items-center justify-center bg-primary">
-              <File className="h-5 w-5 text-primary-foreground" />
+            <div className="h-11 w-9 rounded flex items-center justify-center bg-[#f15c6d]">
+              <File className="h-5 w-5 text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{mediaCaption || 'Documento'}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                PDF · Clique para baixar
-              </p>
+              <p className="text-sm text-[#e9edef] truncate">{mediaCaption || 'Documento'}</p>
+              <p className="text-xs text-[#8696a0] mt-0.5">PDF · Clique para baixar</p>
             </div>
-            <Download className="h-5 w-5 text-muted-foreground flex-shrink-0 hover:scale-110 transition-transform" />
+            <Download className="h-5 w-5 text-[#8696a0]" />
           </a>
         );
 
@@ -237,32 +205,16 @@ export function WhatsAppMessageBubble({
     }
   };
 
-  // Tail SVG for the bubble
   const BubbleTail = () => (
     <div className={cn(
       "absolute top-0 w-2 h-3",
-      isFromAgent ? "right-[-8px]" : "left-[-8px]"
+      isFromAgent ? "-right-2" : "-left-2"
     )}>
-      <svg
-        viewBox="0 0 8 13"
-        width="8"
-        height="13"
-        className={cn(
-          isFromAgent 
-            ? "text-[hsl(var(--chat-bubble-outgoing))]" 
-            : "text-[hsl(var(--chat-bubble-incoming))]"
-        )}
-      >
+      <svg viewBox="0 0 8 13" width="8" height="13">
         {isFromAgent ? (
-          <path
-            fill="currentColor"
-            d="M1.533 3.568 8 12.193V1H2.812C1.042 1 .474 2.156 1.533 3.568z"
-          />
+          <path fill="#005c4b" d="M1.533 3.568 8 12.193V1H2.812C1.042 1 .474 2.156 1.533 3.568z" />
         ) : (
-          <path
-            fill="currentColor"
-            d="M6.467 3.568 0 12.193V1h5.188c1.77 0 2.338 1.156 1.279 2.568z"
-          />
+          <path fill="#202c33" d="M6.467 3.568 0 12.193V1h5.188c1.77 0 2.338 1.156 1.279 2.568z" />
         )}
       </svg>
     </div>
@@ -270,16 +222,15 @@ export function WhatsAppMessageBubble({
 
   return (
     <div 
-      className={cn('flex mb-[3px] animate-fade-in-up', isFromAgent ? 'justify-end' : 'justify-start')}
+      className={cn('flex mb-[2px]', isFromAgent ? 'justify-end' : 'justify-start')}
       style={{ animationDelay: `${animationDelay}ms` }}
     >
       <div
         className={cn(
-          'relative max-w-[65%] rounded-lg px-3 py-1.5 elevation-1 transition-all duration-200',
-          'hover:elevation-2',
+          'relative max-w-[65%] rounded-lg px-[9px] py-[6px] shadow-sm',
           isFromAgent
-            ? 'bg-[hsl(var(--chat-bubble-outgoing))] rounded-tr-none'
-            : 'bg-[hsl(var(--chat-bubble-incoming))] rounded-tl-none'
+            ? 'bg-[#005c4b] rounded-tr-none'
+            : 'bg-[#202c33] rounded-tl-none'
         )}
       >
         <BubbleTail />
@@ -287,11 +238,11 @@ export function WhatsAppMessageBubble({
         {renderMedia()}
         
         {messageType === 'text' && (
-          <div className="flex items-end gap-1.5 flex-wrap">
-            <p className="text-[14.2px] text-foreground whitespace-pre-wrap break-words leading-5">
+          <div className="flex items-end gap-1 flex-wrap">
+            <p className="text-[14.2px] text-[#e9edef] whitespace-pre-wrap break-words leading-[19px]">
               {content}
             </p>
-            <span className="text-[11px] text-muted-foreground whitespace-nowrap ml-auto mb-[1px] flex items-center gap-1 tabular-nums">
+            <span className="text-[11px] text-[#ffffff99] whitespace-nowrap ml-auto mb-[1px] flex items-center gap-1 tabular-nums">
               {formatTime(createdAt)}
               <MessageStatusIcon status={status} isFromAgent={isFromAgent} />
             </span>
@@ -300,7 +251,7 @@ export function WhatsAppMessageBubble({
 
         {messageType !== 'text' && (
           <div className="flex items-center justify-end gap-1 mt-1">
-            <span className="text-[11px] text-muted-foreground tabular-nums">
+            <span className="text-[11px] text-[#ffffff99] tabular-nums">
               {formatTime(createdAt)}
             </span>
             <MessageStatusIcon status={status} isFromAgent={isFromAgent} />
