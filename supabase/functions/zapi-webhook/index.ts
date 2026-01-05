@@ -69,7 +69,8 @@ async function handleReceivedMessage(supabase: any, data: any) {
 
   // Determine message type and content
   let messageType = 'text';
-  let content = text || '';
+  // Z-API sends text as object {message: "..."} or as string
+  let content = typeof text === 'object' ? text?.message : (text || '');
   let mediaUrl = null;
   let mediaMimeType = null;
   let mediaCaption = null;
@@ -111,6 +112,9 @@ async function handleReceivedMessage(supabase: any, data: any) {
     
     if (convError) throw convError;
     
+    // Convert momment (milliseconds timestamp) to ISO string
+    const messageTimestamp = momment ? new Date(momment).toISOString() : new Date().toISOString();
+    
     if (!conversation) {
       const { data: newConv, error: createError } = await supabase
         .from('conversations')
@@ -118,7 +122,7 @@ async function handleReceivedMessage(supabase: any, data: any) {
           phone: cleanPhone,
           name: senderName || cleanPhone,
           last_message: content,
-          last_message_at: momment || new Date().toISOString(),
+          last_message_at: messageTimestamp,
           unread_count: 1,
         })
         .select()
