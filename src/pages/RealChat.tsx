@@ -72,6 +72,13 @@ export default function RealChat() {
     }
   }, [conversations, convLoading, selectedConversation]);
 
+  // Garante refetch ao trocar de conversa (evita ficar preso no skeleton)
+  useEffect(() => {
+    if (selectedConversation?.id) {
+      refetchMessages();
+    }
+  }, [selectedConversation?.id, refetchMessages]);
+
   const handleSync = async () => {
     setSyncing(true);
     try {
