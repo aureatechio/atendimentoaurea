@@ -54,9 +54,19 @@ serve(async (req) => {
         });
     }
 
+    const clientToken = Deno.env.get('ZAPI_CLIENT_TOKEN');
+    
     console.log(`📱 Z-API action: ${action}`);
 
-    const response = await fetch(zapiUrl, { method });
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (clientToken) {
+      headers['Client-Token'] = clientToken;
+    }
+
+    const response = await fetch(zapiUrl, { method, headers });
     
     // For QR code, return the image data
     if (action === 'qrcode') {

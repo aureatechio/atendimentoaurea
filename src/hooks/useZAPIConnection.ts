@@ -40,17 +40,10 @@ export function useZAPIConnection() {
   const getQRCode = useCallback(async () => {
     try {
       setQrLoading(true);
-      const { data, error } = await supabase.functions.invoke('zapi-status', {
-        body: {},
-        headers: { 'action': 'qrcode' }
-      });
-
-      // Use query params approach
       const response = await fetch(
         `https://olifecuguxdfzwuzeaox.supabase.co/functions/v1/zapi-status?action=qrcode`,
         {
           headers: {
-            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
             'Content-Type': 'application/json',
           },
         }
@@ -63,6 +56,8 @@ export function useZAPIConnection() {
         setStatus(prev => ({ ...prev, connected: true, qrcode: null }));
       } else if (result.qrcode) {
         setStatus(prev => ({ ...prev, qrcode: result.qrcode }));
+      } else if (result.error) {
+        setStatus(prev => ({ ...prev, error: result.error }));
       }
       
       return result;
@@ -80,7 +75,6 @@ export function useZAPIConnection() {
         `https://olifecuguxdfzwuzeaox.supabase.co/functions/v1/zapi-status?action=disconnect`,
         {
           headers: {
-            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
             'Content-Type': 'application/json',
           },
         }
@@ -102,7 +96,6 @@ export function useZAPIConnection() {
         `https://olifecuguxdfzwuzeaox.supabase.co/functions/v1/zapi-status?action=restart`,
         {
           headers: {
-            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
             'Content-Type': 'application/json',
           },
         }
