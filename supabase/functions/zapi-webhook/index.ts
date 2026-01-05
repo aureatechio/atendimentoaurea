@@ -53,19 +53,29 @@ serve(async (req) => {
 });
 
 async function handleReceivedMessage(supabase: any, data: any) {
-  const { phone, text, senderName, messageId, momment, isGroup, image, audio, video, document } = data;
+  const { phone, text, senderName, messageId, momment, isGroup, image, audio, video, document, fromMe } = data;
   
   if (isGroup) {
     console.log('👥 Ignoring group message');
     return;
   }
   
-  const cleanPhone = phone?.replace('@c.us', '').replace('@g.us', '');
+  // Clean phone - remove suffixes like @c.us, @g.us, @lid, -group
+  let cleanPhone = phone?.replace('@c.us', '').replace('@g.us', '').replace('@lid', '').replace('-group', '');
+  
+  // Skip if phone looks like a LID (Linked ID) format - these are internal WhatsApp IDs
+  if (cleanPhone && cleanPhone.match(/^\d{15,}$/)) {
+    console.log('⚠️ Skipping LID format phone:', cleanPhone);
+    return;
+  }
   
   if (!cleanPhone) {
     console.log('⚠️ Missing phone in message');
     return;
   }
+  
+  // Determine sender type based on fromMe flag
+  const senderType = fromMe ? 'agent' : 'customer';
 
   // Determine message type and content
   let messageType = 'text';
@@ -100,7 +110,7 @@ async function handleReceivedMessage(supabase: any, data: any) {
     content = `[Documento: ${mediaCaption}]`;
   }
 
-  console.log(`📩 New ${messageType} from ${senderName} (${cleanPhone})`);
+  console.log(`📩 New ${messageType} from ${senderType} (${cleanPhone}): ${content.substring(0, 50)}`);
   
   try {
     // Find or create conversation
@@ -139,9 +149,9 @@ async function handleReceivedMessage(supabase: any, data: any) {
       .insert({
         conversation_id: conversation.id,
         content,
-        sender_type: 'customer',
+        sender_type: senderType,
         message_id: messageId,
-        status: 'delivered',
+        status: fromMe ? 'sent' : 'delivered',
         message_type: messageType,
         media_url: mediaUrl,
         media_mime_type: mediaMimeType,
@@ -151,8 +161,7 @@ async function handleReceivedMessage(supabase: any, data: any) {
       .single();
     
     if (msgError) throw msgError;
-    console.log('✅ Message saved:', message.id);
-    
+    console.log(`✅ Message saved (${senderType}):`, message.id);
   } catch (err) {
     console.error('❌ Failed to process message:', err);
   }
