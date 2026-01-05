@@ -30,7 +30,7 @@ export default function RealChat() {
       const result = await response.json();
       
       if (result.success) {
-        toast.success(`Sincronizado! ${result.imported} conversas importadas, ${result.skipped} ignoradas`);
+        toast.success(result.message || `Sincronizado! ${result.imported} novas, ${result.updated || 0} atualizadas`);
         refetch();
       } else {
         toast.error(result.error || 'Erro ao sincronizar');

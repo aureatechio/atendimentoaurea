@@ -28,36 +28,57 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch chats from Z-API
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (clientToken) {
       headers['Client-Token'] = clientToken;
     }
 
-    console.log('📱 Fetching chats from Z-API...');
+    console.log('📱 Fetching all chats from Z-API...');
     
-    const zapiUrl = `https://api.z-api.io/instances/${instanceId}/token/${token}/chats?page=1&pageSize=50`;
-    const response = await fetch(zapiUrl, { headers });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Z-API error:', errorText);
-      return new Response(JSON.stringify({ error: 'Failed to fetch chats from Z-API', details: errorText }), {
-        status: response.status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    let allChats: any[] = [];
+    let page = 1;
+    const pageSize = 100;
+    let hasMore = true;
+
+    // Paginate through all chats
+    while (hasMore) {
+      const zapiUrl = `https://api.z-api.io/instances/${instanceId}/token/${token}/chats?page=${page}&pageSize=${pageSize}`;
+      console.log(`📄 Fetching page ${page}...`);
+      
+      const response = await fetch(zapiUrl, { headers });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Z-API error:', errorText);
+        break;
+      }
+
+      const chats = await response.json();
+      console.log(`📋 Page ${page}: Found ${chats.length} chats`);
+      
+      if (chats.length === 0) {
+        hasMore = false;
+      } else {
+        allChats = allChats.concat(chats);
+        page++;
+        
+        // Safety limit
+        if (page > 20) {
+          console.log('⚠️ Reached page limit');
+          hasMore = false;
+        }
+      }
     }
 
-    const chats = await response.json();
-    console.log(`📋 Found ${chats.length} chats`);
+    console.log(`📊 Total chats found: ${allChats.length}`);
 
     let imported = 0;
     let skipped = 0;
+    let updated = 0;
 
-    for (const chat of chats) {
+    for (const chat of allChats) {
       // Skip groups for now
       if (chat.isGroup) {
-        console.log(`⏭️ Skipping group: ${chat.name}`);
         skipped++;
         continue;
       }
@@ -68,6 +89,15 @@ serve(async (req) => {
         continue;
       }
 
+      // Parse lastMessageTime
+      let lastMessageAt = new Date().toISOString();
+      if (chat.lastMessageTime) {
+        const timestamp = parseInt(chat.lastMessageTime);
+        if (timestamp > 1577836800 && timestamp < 1893456000) {
+          lastMessageAt = new Date(timestamp * 1000).toISOString();
+        }
+      }
+
       // Check if conversation already exists
       const { data: existing } = await supabase
         .from('conversations')
@@ -76,19 +106,20 @@ serve(async (req) => {
         .maybeSingle();
 
       if (existing) {
-        console.log(`⏭️ Conversation already exists for ${phone}`);
-        skipped++;
-        continue;
-      }
+        // Update existing conversation with latest info
+        const { error: updateError } = await supabase
+          .from('conversations')
+          .update({
+            name: chat.name || phone,
+            avatar_url: chat.profileThumbnail || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id);
 
-      // Parse lastMessageTime - Z-API returns Unix timestamp in seconds
-      let lastMessageAt = new Date().toISOString();
-      if (chat.lastMessageTime) {
-        const timestamp = parseInt(chat.lastMessageTime);
-        // Validate timestamp is reasonable (between 2020 and 2030)
-        if (timestamp > 1577836800 && timestamp < 1893456000) {
-          lastMessageAt = new Date(timestamp * 1000).toISOString();
+        if (!updateError) {
+          updated++;
         }
+        continue;
       }
 
       // Create new conversation
@@ -104,17 +135,22 @@ serve(async (req) => {
 
       if (insertError) {
         console.error(`❌ Error importing ${phone}:`, insertError);
+        skipped++;
       } else {
         console.log(`✅ Imported: ${chat.name || phone}`);
         imported++;
       }
     }
 
+    console.log(`📊 Summary: ${imported} imported, ${updated} updated, ${skipped} skipped`);
+
     return new Response(JSON.stringify({ 
       success: true,
-      total: chats.length,
+      total: allChats.length,
       imported,
+      updated,
       skipped,
+      message: `Sincronizado! ${imported} novas conversas, ${updated} atualizadas. Obs: A Z-API não permite buscar histórico de mensagens, apenas conversas recentes e novas mensagens via webhook.`,
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
