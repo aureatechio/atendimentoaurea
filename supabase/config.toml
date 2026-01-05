@@ -1,1 +1,10 @@
 project_id = "olifecuguxdfzwuzeaox"
+
+[functions.zapi-webhook]
+verify_jwt = false
+
+[functions.zapi-send]
+verify_jwt = false
+
+[functions.zapi-status]
+verify_jwt = false
