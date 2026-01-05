@@ -22,6 +22,10 @@ export interface RealMessage {
   message_id: string | null;
   status: string;
   created_at: string;
+  message_type: string;
+  media_url: string | null;
+  media_mime_type: string | null;
+  media_caption: string | null;
 }
 
 export function useRealConversations() {
@@ -47,7 +51,6 @@ export function useRealConversations() {
   useEffect(() => {
     fetchConversations();
 
-    // Subscribe to realtime changes
     const channel = supabase
       .channel('conversations-changes')
       .on(
@@ -123,6 +126,10 @@ export function useRealMessages(conversationId: string | null) {
       setMessages((data || []).map(m => ({
         ...m,
         sender_type: m.sender_type as 'customer' | 'agent',
+        message_type: m.message_type || 'text',
+        media_url: m.media_url || null,
+        media_mime_type: m.media_mime_type || null,
+        media_caption: m.media_caption || null,
       })));
     } catch (err) {
       console.error('Error fetching messages:', err);
@@ -136,24 +143,33 @@ export function useRealMessages(conversationId: string | null) {
 
     if (!conversationId) return;
 
-    // Subscribe to realtime messages
     const channel = supabase
       .channel(`messages-${conversationId}`)
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'messages',
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
-          console.log('New message:', payload);
-          const newMsg = payload.new as RealMessage;
-          setMessages(prev => [...prev, {
-            ...newMsg,
-            sender_type: newMsg.sender_type as 'customer' | 'agent',
-          }]);
+          console.log('Message change:', payload);
+          if (payload.eventType === 'INSERT') {
+            const newMsg = payload.new as RealMessage;
+            setMessages(prev => [...prev, {
+              ...newMsg,
+              sender_type: newMsg.sender_type as 'customer' | 'agent',
+              message_type: newMsg.message_type || 'text',
+            }]);
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedMsg = payload.new as RealMessage;
+            setMessages(prev => prev.map(m => 
+              m.id === updatedMsg.id 
+                ? { ...updatedMsg, sender_type: updatedMsg.sender_type as 'customer' | 'agent' }
+                : m
+            ));
+          }
         }
       )
       .subscribe();
@@ -166,7 +182,6 @@ export function useRealMessages(conversationId: string | null) {
   const sendMessage = useCallback(async (content: string) => {
     if (!conversationId || !content.trim()) return;
 
-    // Get conversation phone for sending
     const { data: conv } = await supabase
       .from('conversations')
       .select('phone')
@@ -175,7 +190,6 @@ export function useRealMessages(conversationId: string | null) {
 
     if (!conv) return;
 
-    // Save message locally first
     const { data: message, error } = await supabase
       .from('messages')
       .insert({
@@ -183,6 +197,7 @@ export function useRealMessages(conversationId: string | null) {
         content: content.trim(),
         sender_type: 'agent',
         status: 'sending',
+        message_type: 'text',
       })
       .select()
       .single();
@@ -192,7 +207,6 @@ export function useRealMessages(conversationId: string | null) {
       return;
     }
 
-    // Send via Z-API
     try {
       const response = await fetch(
         `https://olifecuguxdfzwuzeaox.supabase.co/functions/v1/zapi-send`,
@@ -202,13 +216,13 @@ export function useRealMessages(conversationId: string | null) {
           body: JSON.stringify({
             phone: conv.phone,
             message: content.trim(),
+            messageType: 'text',
           }),
         }
       );
 
       const result = await response.json();
       
-      // Update message status
       await supabase
         .from('messages')
         .update({ 
@@ -226,5 +240,76 @@ export function useRealMessages(conversationId: string | null) {
     }
   }, [conversationId]);
 
-  return { messages, loading, sendMessage, refetch: fetchMessages };
+  const sendMedia = useCallback(async (type: string, mediaUrl: string, caption?: string) => {
+    if (!conversationId) return;
+
+    const { data: conv } = await supabase
+      .from('conversations')
+      .select('phone')
+      .eq('id', conversationId)
+      .single();
+
+    if (!conv) return;
+
+    const contentMap: Record<string, string> = {
+      image: caption || '[Imagem]',
+      audio: '[Áudio]',
+      video: caption || '[Vídeo]',
+      document: `[Documento: ${caption}]`,
+    };
+
+    const { data: message, error } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        content: contentMap[type] || '[Mídia]',
+        sender_type: 'agent',
+        status: 'sending',
+        message_type: type,
+        media_url: mediaUrl,
+        media_caption: caption,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error saving message:', error);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://olifecuguxdfzwuzeaox.supabase.co/functions/v1/zapi-send`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: conv.phone,
+            messageType: type,
+            mediaUrl: mediaUrl,
+            caption: caption,
+          }),
+        }
+      );
+
+      const result = await response.json();
+      
+      await supabase
+        .from('messages')
+        .update({ 
+          status: result.success ? 'sent' : 'error',
+          message_id: result.messageId,
+        })
+        .eq('id', message.id);
+
+    } catch (err) {
+      console.error('Error sending media:', err);
+      await supabase
+        .from('messages')
+        .update({ status: 'error' })
+        .eq('id', message.id);
+    }
+  }, [conversationId]);
+
+  return { messages, loading, sendMessage, sendMedia, refetch: fetchMessages };
 }
