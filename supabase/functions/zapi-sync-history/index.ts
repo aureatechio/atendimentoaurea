@@ -10,6 +10,7 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const zapiInstanceId = Deno.env.get('ZAPI_INSTANCE_ID')!;
 const zapiToken = Deno.env.get('ZAPI_TOKEN')!;
+const zapiClientToken = Deno.env.get('ZAPI_CLIENT_TOKEN') || '';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -19,26 +20,34 @@ serve(async (req) => {
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const body = await req.json().catch(() => ({}));
-    const { phone, limit = 50 } = body;
+    const { phone, limit = 100 } = body;
 
     console.log('🔄 Starting sync...', phone ? `for ${phone}` : 'all chats');
 
+    // Headers for Z-API requests
+    const zapiHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (zapiClientToken) {
+      zapiHeaders['Client-Token'] = zapiClientToken;
+    }
+
     if (phone) {
       // Sync specific conversation
-      const result = await syncConversationMessages(supabase, phone, limit);
+      const result = await syncConversationMessages(supabase, phone, limit, zapiHeaders);
       return new Response(JSON.stringify(result), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Sync all chats
+    // Sync all chats - first get the list of chats
     const chatsResponse = await fetch(
-      `https://api.z-api.io/instances/${zapiInstanceId}/token/${zapiToken}/chats`,
-      { method: 'GET' }
+      `https://api.z-api.io/instances/${zapiInstanceId}/token/${zapiToken}/chats?page=1&pageSize=50`,
+      { method: 'GET', headers: zapiHeaders }
     );
 
     if (!chatsResponse.ok) {
+      const errorText = await chatsResponse.text();
+      console.error('❌ Failed to fetch chats:', chatsResponse.status, errorText);
       throw new Error(`Failed to fetch chats: ${chatsResponse.status}`);
     }
 
@@ -50,15 +59,19 @@ serve(async (req) => {
     console.log(`👤 ${individualChats.length} individual chats to sync`);
 
     let synced = 0;
+    let totalMessages = 0;
     let errors = 0;
 
-    for (const chat of individualChats.slice(0, 20)) { // Limit to 20 chats per sync
+    // Sync top 10 most recent chats
+    for (const chat of individualChats.slice(0, 10)) {
       try {
         const cleanPhone = chat.phone?.replace('@c.us', '').replace('@g.us', '');
         if (!cleanPhone) continue;
 
-        await syncConversationMessages(supabase, cleanPhone, limit);
+        const result = await syncConversationMessages(supabase, cleanPhone, limit, zapiHeaders);
         synced++;
+        totalMessages += result.synced || 0;
+        console.log(`✅ Synced ${result.synced} messages for ${cleanPhone}`);
       } catch (err) {
         console.error(`❌ Error syncing chat:`, err);
         errors++;
@@ -67,9 +80,11 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ 
       success: true, 
-      synced, 
+      synced,
+      totalMessages,
       errors,
-      total: individualChats.length 
+      total: individualChats.length,
+      message: `Sincronizado ${totalMessages} mensagens de ${synced} conversas`
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -85,16 +100,23 @@ serve(async (req) => {
   }
 });
 
-async function syncConversationMessages(supabase: any, phone: string, limit: number) {
+async function syncConversationMessages(
+  supabase: any, 
+  phone: string, 
+  limit: number,
+  headers: Record<string, string>
+) {
   console.log(`📥 Syncing messages for ${phone}...`);
 
   // Fetch messages from Z-API
   const messagesResponse = await fetch(
     `https://api.z-api.io/instances/${zapiInstanceId}/token/${zapiToken}/chat-messages/${phone}?amount=${limit}`,
-    { method: 'GET' }
+    { method: 'GET', headers }
   );
 
   if (!messagesResponse.ok) {
+    const errorText = await messagesResponse.text();
+    console.error(`❌ Failed to fetch messages for ${phone}:`, messagesResponse.status, errorText);
     throw new Error(`Failed to fetch messages: ${messagesResponse.status}`);
   }
 
@@ -114,7 +136,7 @@ async function syncConversationMessages(supabase: any, phone: string, limit: num
     .eq('phone', phone)
     .maybeSingle();
 
-  // Get the most recent message for conversation info
+  // Get contact info from the most recent message
   const lastMsg = messages[0];
   const contactName = lastMsg?.senderName || lastMsg?.chatName || phone;
 
@@ -145,7 +167,7 @@ async function syncConversationMessages(supabase: any, phone: string, limit: num
 
   const existingIds = new Set(existingMessages?.map((m: any) => m.message_id) || []);
 
-  // Insert new messages
+  // Insert new messages (both fromMe and not fromMe)
   const newMessages = messages
     .filter((msg: any) => msg.messageId && !existingIds.has(msg.messageId))
     .map((msg: any) => ({
@@ -167,9 +189,25 @@ async function syncConversationMessages(supabase: any, phone: string, limit: num
       .insert(newMessages);
 
     if (insertError) throw insertError;
-    console.log(`✅ Inserted ${newMessages.length} messages for ${phone}`);
+    console.log(`✅ Inserted ${newMessages.length} messages for ${phone} (${newMessages.filter((m: any) => m.sender_type === 'agent').length} sent by you)`);
   } else {
     console.log(`ℹ️ No new messages for ${phone}`);
+  }
+
+  // Update conversation with latest message info
+  const latestMsg = newMessages.length > 0 
+    ? newMessages.reduce((a: any, b: any) => new Date(a.created_at) > new Date(b.created_at) ? a : b)
+    : null;
+
+  if (latestMsg) {
+    await supabase
+      .from('conversations')
+      .update({
+        last_message: latestMsg.content,
+        last_message_at: latestMsg.created_at,
+        name: contactName || conversation.name,
+      })
+      .eq('id', conversation.id);
   }
 
   return { phone, synced: newMessages.length };
