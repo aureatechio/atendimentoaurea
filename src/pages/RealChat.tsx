@@ -1,24 +1,44 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRealConversations, useRealMessages, RealConversation } from '@/hooks/useRealConversations';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ArrowLeft, MessageSquare, Settings, RefreshCw, Download } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { 
+  Loader2, 
+  Search, 
+  Settings, 
+  RefreshCw, 
+  Download,
+  MoreVertical,
+  ArrowLeft,
+  Phone,
+  Video,
+  X
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistanceToNow } from 'date-fns';
+import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { WhatsAppMessageBubble } from '@/components/chat/WhatsAppMessageBubble';
 import { WhatsAppChatInput } from '@/components/chat/WhatsAppChatInput';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function RealChat() {
   const { conversations, loading: convLoading, markAsRead, refetch } = useRealConversations();
   const [selectedConversation, setSelectedConversation] = useState<RealConversation | null>(null);
   const { messages, loading: msgLoading, sendMessage, sendMedia } = useRealMessages(selectedConversation?.id || null);
   const [syncing, setSyncing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -35,7 +55,7 @@ export default function RealChat() {
       const result = await response.json();
       
       if (result.success) {
-        toast.success(result.message || `Sincronizado! ${result.imported} novas, ${result.updated || 0} atualizadas`);
+        toast.success(result.message || `Sincronizado!`);
         refetch();
       } else {
         toast.error(result.error || 'Erro ao sincronizar');
@@ -55,166 +75,337 @@ export default function RealChat() {
     }
   };
 
+  const formatMessageTime = (dateString: string | null) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    
+    if (isToday(date)) {
+      return format(date, 'HH:mm');
+    } else if (isYesterday(date)) {
+      return 'Ontem';
+    } else if (isThisWeek(date)) {
+      return format(date, 'EEEE', { locale: ptBR });
+    } else {
+      return format(date, 'dd/MM/yyyy');
+    }
+  };
+
+  const filteredConversations = conversations.filter(conv => {
+    if (!searchQuery) return true;
+    const name = (conv.name || conv.phone).toLowerCase();
+    const phone = conv.phone.toLowerCase();
+    const query = searchQuery.toLowerCase();
+    return name.includes(query) || phone.includes(query);
+  });
+
+  // Group messages by date
+  const groupedMessages = messages.reduce((groups, message) => {
+    const date = format(new Date(message.created_at), 'yyyy-MM-dd');
+    if (!groups[date]) {
+      groups[date] = [];
+    }
+    groups[date].push(message);
+    return groups;
+  }, {} as Record<string, typeof messages>);
+
+  const formatDateHeader = (dateStr: string) => {
+    const date = new Date(dateStr);
+    if (isToday(date)) return 'HOJE';
+    if (isYesterday(date)) return 'ONTEM';
+    return format(date, "d 'de' MMMM 'de' yyyy", { locale: ptBR }).toUpperCase();
+  };
+
   return (
-    <div className="flex h-screen bg-[#efeae2]">
+    <div className="flex h-screen bg-[hsl(var(--whatsapp-chat-bg))]">
       {/* Sidebar */}
-      <div className="w-80 bg-card border-r border-border flex flex-col">
-        <header className="p-4 border-b border-border bg-[#f0f2f5]">
-          <div className="flex items-center justify-between mb-2">
-            <h1 className="text-lg font-semibold">WhatsApp</h1>
-            <div className="flex gap-1">
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={handleSync} 
-                disabled={syncing}
-                className="h-8 w-8"
-                title="Sincronizar conversas da Z-API"
-              >
-                {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              </Button>
-              <Button variant="ghost" size="icon" onClick={refetch} className="h-8 w-8" title="Atualizar">
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Link to="/whatsapp">
-                <Button variant="ghost" size="icon" className="h-8 w-8" title="Configurações">
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </Link>
-            </div>
+      <div className={cn(
+        "w-full md:w-[400px] lg:w-[420px] bg-[hsl(var(--whatsapp-sidebar))] border-r border-border flex flex-col",
+        selectedConversation && "hidden md:flex"
+      )}>
+        {/* Header */}
+        <header className="h-[60px] px-4 flex items-center justify-between bg-[hsl(var(--whatsapp-header))] border-b border-border">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-10 w-10">
+              <AvatarFallback className="bg-[hsl(var(--whatsapp-icon))] text-white">
+                A
+              </AvatarFallback>
+            </Avatar>
           </div>
-          <p className="text-xs text-muted-foreground">Conversas reais do WhatsApp</p>
+          <div className="flex items-center gap-1">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleSync} 
+              disabled={syncing}
+              className="h-10 w-10 text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))]"
+              title="Sincronizar conversas"
+            >
+              {syncing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={refetch} 
+              className="h-10 w-10 text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))]"
+              title="Atualizar"
+            >
+              <RefreshCw className="h-5 w-5" />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-10 w-10 text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))]"
+                >
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52 bg-card">
+                <DropdownMenuItem asChild>
+                  <Link to="/whatsapp" className="flex items-center gap-2">
+                    <Settings className="h-4 w-4" />
+                    Configurações Z-API
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </header>
 
-        <ScrollArea className="flex-1">
+        {/* Search */}
+        <div className="px-2 py-2 bg-[hsl(var(--whatsapp-sidebar))]">
+          <div className="relative">
+            <div className={cn(
+              "flex items-center bg-[hsl(var(--whatsapp-panel-bg))] rounded-lg transition-all",
+              showSearch && "ring-1 ring-[hsl(var(--whatsapp-teal-dark))]"
+            )}>
+              <div className="pl-4 pr-2 py-2">
+                {showSearch ? (
+                  <ArrowLeft 
+                    className="h-5 w-5 text-[hsl(var(--whatsapp-teal-dark))] cursor-pointer" 
+                    onClick={() => {
+                      setShowSearch(false);
+                      setSearchQuery('');
+                    }}
+                  />
+                ) : (
+                  <Search className="h-5 w-5 text-[hsl(var(--whatsapp-icon))]" />
+                )}
+              </div>
+              <Input 
+                placeholder="Pesquisar ou começar uma nova conversa"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setShowSearch(true)}
+                className="border-0 bg-transparent focus-visible:ring-0 text-sm h-[35px] placeholder:text-[hsl(var(--whatsapp-icon))]"
+              />
+              {searchQuery && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 mr-1"
+                  onClick={() => setSearchQuery('')}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Conversations List */}
+        <div className="flex-1 overflow-y-auto">
           {convLoading ? (
             <div className="flex items-center justify-center h-40">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--whatsapp-icon))]" />
             </div>
-          ) : conversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
-              <MessageSquare className="h-8 w-8 mb-2 opacity-50" />
-              <p className="text-sm">Nenhuma conversa ainda</p>
-              <p className="text-xs">Clique em ⬇️ para sincronizar</p>
+          ) : filteredConversations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 text-[hsl(var(--whatsapp-icon))] px-8">
+              {searchQuery ? (
+                <>
+                  <p className="text-sm text-center">Nenhuma conversa encontrada para "{searchQuery}"</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-center">Nenhuma conversa ainda</p>
+                  <p className="text-xs text-center mt-1">Clique em ⬇️ para sincronizar</p>
+                </>
+              )}
             </div>
           ) : (
-            <div className="divide-y divide-border">
-              {conversations.map((conv) => (
-                <button
-                  key={conv.id}
-                  onClick={() => handleSelectConversation(conv)}
-                  className={cn(
-                    'w-full p-3 text-left hover:bg-accent/50 transition-colors',
-                    selectedConversation?.id === conv.id && 'bg-accent'
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-12 w-12">
-                      {conv.avatar_url && <AvatarImage src={conv.avatar_url} />}
-                      <AvatarFallback className="bg-[#00a884] text-white">
-                        {(conv.name || conv.phone).slice(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium truncate">{conv.name || conv.phone}</span>
-                        {conv.last_message_at && (
-                          <span className={cn(
-                            'text-xs',
-                            conv.unread_count > 0 ? 'text-[#00a884] font-medium' : 'text-muted-foreground'
-                          )}>
-                            {formatDistanceToNow(new Date(conv.last_message_at), { locale: ptBR })}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <p className="text-sm text-muted-foreground truncate flex-1">
-                          {conv.last_message || 'Sem mensagens'}
-                        </p>
-                        {conv.unread_count > 0 && (
-                          <Badge className="ml-2 h-5 min-w-5 px-1.5 text-xs bg-[#25d366] hover:bg-[#25d366]">
-                            {conv.unread_count}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
+            filteredConversations.map((conv) => (
+              <button
+                key={conv.id}
+                onClick={() => handleSelectConversation(conv)}
+                className={cn(
+                  'w-full px-3 py-2 flex items-center gap-3 hover:bg-[hsl(var(--whatsapp-hover))] transition-colors',
+                  selectedConversation?.id === conv.id && 'bg-[hsl(var(--whatsapp-selected))]'
+                )}
+              >
+                <Avatar className="h-[49px] w-[49px] flex-shrink-0">
+                  {conv.avatar_url && <AvatarImage src={conv.avatar_url} />}
+                  <AvatarFallback className="bg-[hsl(var(--whatsapp-icon))] text-white text-lg">
+                    {(conv.name || conv.phone).slice(0, 1).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0 border-t border-border py-3 -my-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-normal text-[17px] text-foreground truncate">
+                      {conv.name || conv.phone}
+                    </span>
+                    <span className={cn(
+                      'text-xs flex-shrink-0 ml-2',
+                      conv.unread_count > 0 ? 'text-[hsl(var(--whatsapp-unread))]' : 'text-[hsl(var(--whatsapp-time))]'
+                    )}>
+                      {formatMessageTime(conv.last_message_at)}
+                    </span>
                   </div>
-                </button>
-              ))}
-            </div>
+                  <div className="flex items-center justify-between mt-0.5">
+                    <p className="text-sm text-[hsl(var(--whatsapp-time))] truncate flex-1 pr-2">
+                      {conv.last_message || 'Sem mensagens'}
+                    </p>
+                    {conv.unread_count > 0 && (
+                      <Badge className="h-[20px] min-w-[20px] px-1.5 text-xs font-normal bg-[hsl(var(--whatsapp-unread))] hover:bg-[hsl(var(--whatsapp-unread))] rounded-full">
+                        {conv.unread_count}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </button>
+            ))
           )}
-        </ScrollArea>
+        </div>
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className={cn(
+        "flex-1 flex flex-col",
+        !selectedConversation && "hidden md:flex"
+      )}>
         {!selectedConversation ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-[#f0f2f5]">
-            <div className="bg-white/50 rounded-full p-8 mb-4">
-              <MessageSquare className="h-16 w-16 opacity-30" />
+          <div className="flex-1 flex flex-col items-center justify-center bg-[hsl(var(--whatsapp-panel-bg))] border-b-[6px] border-[hsl(var(--whatsapp-teal-dark))]">
+            <div className="max-w-[500px] text-center px-8">
+              <img 
+                src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 303 172'%3E%3Cpath fill='%2300A884' d='M152.5 0C68.3 0 0 68.3 0 152.5c0 25.3 6.2 49.2 17.1 70.2L0 303l82.4-17.1c20.3 10.5 43.4 16.4 68 16.4 84.2 0 152.5-68.3 152.5-152.5S236.7 0 152.5 0z'/%3E%3C/svg%3E" 
+                alt="WhatsApp" 
+                className="w-[250px] h-[250px] mx-auto mb-8 opacity-20"
+              />
+              <h1 className="text-[32px] font-light text-foreground mb-4">WhatsApp Web</h1>
+              <p className="text-sm text-[hsl(var(--whatsapp-time))] leading-relaxed">
+                Envie e receba mensagens sem precisar manter seu celular online.
+                <br />
+                Use o WhatsApp em até 4 aparelhos conectados ao mesmo tempo.
+              </p>
             </div>
-            <h2 className="text-xl font-light text-foreground mb-2">WhatsApp Web</h2>
-            <p className="text-sm text-center max-w-md">
-              Selecione uma conversa para começar a enviar mensagens
-            </p>
           </div>
         ) : (
           <>
-            {/* Header */}
-            <header className="flex items-center gap-3 px-4 py-2 bg-[#f0f2f5] border-b border-border">
+            {/* Chat Header */}
+            <header className="h-[60px] px-4 flex items-center gap-3 bg-[hsl(var(--whatsapp-header))] border-b border-border">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setSelectedConversation(null)}
-                className="md:hidden h-8 w-8"
+                className="md:hidden h-10 w-10 text-[hsl(var(--whatsapp-icon))]"
               >
-                <ArrowLeft className="h-4 w-4" />
+                <ArrowLeft className="h-5 w-5" />
               </Button>
-              <Avatar className="h-10 w-10">
+              <Avatar className="h-10 w-10 cursor-pointer">
                 {selectedConversation.avatar_url && (
                   <AvatarImage src={selectedConversation.avatar_url} />
                 )}
-                <AvatarFallback className="bg-[#00a884] text-white">
-                  {(selectedConversation.name || selectedConversation.phone).slice(0, 2).toUpperCase()}
+                <AvatarFallback className="bg-[hsl(var(--whatsapp-icon))] text-white">
+                  {(selectedConversation.name || selectedConversation.phone).slice(0, 1).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex-1">
-                <h2 className="font-semibold">{selectedConversation.name || selectedConversation.phone}</h2>
-                <p className="text-xs text-muted-foreground">{selectedConversation.phone}</p>
+              <div className="flex-1 cursor-pointer">
+                <h2 className="text-base font-normal text-foreground">
+                  {selectedConversation.name || selectedConversation.phone}
+                </h2>
+                <p className="text-xs text-[hsl(var(--whatsapp-time))]">
+                  Clique aqui para informações do contato
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-10 w-10 text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))]"
+                >
+                  <Video className="h-5 w-5" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-10 w-10 text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))]"
+                >
+                  <Phone className="h-5 w-5" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-10 w-10 text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))]"
+                >
+                  <Search className="h-5 w-5" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-10 w-10 text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))]"
+                >
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
               </div>
             </header>
 
             {/* Messages */}
             <div 
-              className="flex-1 overflow-y-auto p-4 space-y-2"
+              ref={messagesContainerRef}
+              className="flex-1 overflow-y-auto px-[5%] lg:px-[10%] xl:px-[15%] py-4"
               style={{ 
-                backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23d4d4d4\' fill-opacity=\'0.2\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")',
-                backgroundColor: '#efeae2'
+                backgroundColor: 'hsl(var(--whatsapp-chat-bg))',
+                backgroundImage: `url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAMAAAAp4XiDAAAAUVBMVEWFhYWDg4N3d3dtbW17e3t1dXWBgYGHh4d5eXlzc3Oeli4LAAAAVklEQVQ4y+3RQQ4AIAgEwPH/nzZGxMDGGxmKt+Igc3ItFMgFaAhDCCgEJIKyA6AahgCQIBGQLQDwDyhB5gN4gNR+lGF7AAAAAElFTkSuQmCC")`,
+                backgroundRepeat: 'repeat',
+                backgroundSize: '300px',
               }}
             >
               {msgLoading ? (
                 <div className="flex items-center justify-center h-full">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--whatsapp-icon))]" />
                 </div>
               ) : messages.length === 0 ? (
                 <div className="flex items-center justify-center h-full">
-                  <div className="bg-white/80 rounded-lg px-4 py-2 shadow-sm">
-                    <p className="text-sm text-muted-foreground">Nenhuma mensagem ainda</p>
+                  <div className="bg-[hsl(var(--whatsapp-incoming))] rounded-lg px-4 py-2 shadow-sm">
+                    <p className="text-sm text-[hsl(var(--whatsapp-time))]">
+                      As mensagens são criptografadas de ponta a ponta. Ninguém fora desta conversa, nem mesmo o WhatsApp, pode lê-las ou ouvi-las.
+                    </p>
                   </div>
                 </div>
               ) : (
                 <>
-                  {messages.map((msg) => (
-                    <WhatsAppMessageBubble
-                      key={msg.id}
-                      content={msg.content}
-                      senderType={msg.sender_type}
-                      status={msg.status}
-                      createdAt={msg.created_at}
-                      messageType={msg.message_type}
-                      mediaUrl={msg.media_url}
-                      mediaCaption={msg.media_caption}
-                    />
+                  {Object.entries(groupedMessages).map(([date, msgs]) => (
+                    <div key={date}>
+                      {/* Date separator */}
+                      <div className="flex justify-center my-3">
+                        <span className="bg-[hsl(var(--whatsapp-incoming))] text-[hsl(var(--whatsapp-time))] text-[11px] px-3 py-1 rounded-lg shadow-sm uppercase">
+                          {formatDateHeader(date)}
+                        </span>
+                      </div>
+                      {/* Messages for this date */}
+                      {msgs.map((msg) => (
+                        <WhatsAppMessageBubble
+                          key={msg.id}
+                          content={msg.content}
+                          senderType={msg.sender_type}
+                          status={msg.status}
+                          createdAt={msg.created_at}
+                          messageType={msg.message_type}
+                          mediaUrl={msg.media_url}
+                          mediaCaption={msg.media_caption}
+                        />
+                      ))}
+                    </div>
                   ))}
                   <div ref={messagesEndRef} />
                 </>

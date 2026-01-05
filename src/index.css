@@ -1,127 +1,163 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Design System - WhatsApp-inspired Modern Theme */
+/* Design System - WhatsApp Web Exact Theme */
 
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 210 11% 15%;
+    --foreground: 200 10% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 210 11% 15%;
+    --card-foreground: 200 10% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 210 11% 15%;
+    --popover-foreground: 200 10% 15%;
 
-    /* Primary - WhatsApp Green inspired */
-    --primary: 142 70% 45%;
+    /* Primary - WhatsApp Teal */
+    --primary: 168 76% 36%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 20% 96%;
-    --secondary-foreground: 210 11% 15%;
+    --secondary: 200 12% 95%;
+    --secondary-foreground: 200 10% 15%;
 
-    --muted: 210 15% 94%;
-    --muted-foreground: 210 10% 50%;
+    --muted: 200 12% 92%;
+    --muted-foreground: 200 6% 44%;
 
-    --accent: 142 70% 45%;
+    --accent: 168 76% 36%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 210 20% 90%;
-    --input: 210 20% 90%;
-    --ring: 142 70% 45%;
+    --border: 200 12% 90%;
+    --input: 200 12% 90%;
+    --ring: 168 76% 36%;
 
     --radius: 0.5rem;
 
+    /* WhatsApp specific colors */
+    --whatsapp-teal-dark: 168 76% 36%;
+    --whatsapp-teal-light: 168 50% 42%;
+    --whatsapp-green: 142 70% 49%;
+    --whatsapp-blue: 199 98% 48%;
+    --whatsapp-light-green: 115 54% 76%;
+    --whatsapp-panel-bg: 200 12% 95%;
+    --whatsapp-chat-bg: 30 19% 85%;
+    --whatsapp-outgoing: 85 38% 82%;
+    --whatsapp-incoming: 0 0% 100%;
+    --whatsapp-header: 200 12% 95%;
+    --whatsapp-sidebar: 0 0% 100%;
+    --whatsapp-hover: 200 10% 94%;
+    --whatsapp-selected: 168 30% 93%;
+    --whatsapp-unread: 142 70% 49%;
+    --whatsapp-time: 200 6% 44%;
+    --whatsapp-icon: 200 6% 50%;
+
     /* Chat specific */
-    --chat-bg: 210 20% 97%;
-    --chat-bubble-outgoing: 142 60% 92%;
+    --chat-bg: 30 19% 85%;
+    --chat-bubble-outgoing: 85 38% 82%;
     --chat-bubble-incoming: 0 0% 100%;
     --chat-input-bg: 0 0% 100%;
     
     /* Sidebar */
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 210 11% 15%;
-    --sidebar-primary: 142 70% 45%;
+    --sidebar-foreground: 200 10% 15%;
+    --sidebar-primary: 168 76% 36%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 20% 96%;
-    --sidebar-accent-foreground: 210 11% 15%;
-    --sidebar-border: 210 20% 90%;
-    --sidebar-ring: 142 70% 45%;
-    --sidebar-hover: 210 20% 94%;
+    --sidebar-accent: 168 30% 93%;
+    --sidebar-accent-foreground: 200 10% 15%;
+    --sidebar-border: 200 12% 90%;
+    --sidebar-ring: 168 76% 36%;
+    --sidebar-hover: 200 10% 94%;
     
     /* Status colors */
-    --status-new: 210 100% 50%;
-    --status-active: 142 70% 45%;
-    --status-resolved: 210 10% 60%;
+    --status-new: 199 98% 48%;
+    --status-active: 142 70% 49%;
+    --status-resolved: 200 6% 60%;
     
     /* Badge */
-    --badge-unread: 142 70% 45%;
+    --badge-unread: 142 70% 49%;
     --badge-foreground: 0 0% 100%;
     
     /* Online indicator */
-    --online: 142 70% 50%;
+    --online: 142 70% 49%;
   }
 
   .dark {
-    --background: 222 20% 10%;
-    --foreground: 210 20% 95%;
+    --background: 222 18% 11%;
+    --foreground: 200 15% 90%;
 
-    --card: 222 20% 12%;
-    --card-foreground: 210 20% 95%;
+    --card: 222 18% 13%;
+    --card-foreground: 200 15% 90%;
 
-    --popover: 222 20% 12%;
-    --popover-foreground: 210 20% 95%;
+    --popover: 222 18% 13%;
+    --popover-foreground: 200 15% 90%;
 
-    --primary: 142 70% 50%;
+    --primary: 168 76% 42%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 222 15% 18%;
-    --secondary-foreground: 210 20% 95%;
+    --secondary: 222 12% 18%;
+    --secondary-foreground: 200 15% 90%;
 
-    --muted: 222 15% 20%;
-    --muted-foreground: 210 10% 55%;
+    --muted: 222 12% 20%;
+    --muted-foreground: 200 8% 55%;
 
-    --accent: 142 70% 50%;
+    --accent: 168 76% 42%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 222 15% 20%;
-    --input: 222 15% 20%;
-    --ring: 142 70% 50%;
+    --border: 222 12% 20%;
+    --input: 222 12% 20%;
+    --ring: 168 76% 42%;
+
+    /* WhatsApp dark specific colors */
+    --whatsapp-teal-dark: 168 76% 42%;
+    --whatsapp-teal-light: 168 50% 48%;
+    --whatsapp-green: 142 70% 49%;
+    --whatsapp-blue: 199 98% 58%;
+    --whatsapp-light-green: 115 40% 35%;
+    --whatsapp-panel-bg: 222 18% 13%;
+    --whatsapp-chat-bg: 222 18% 8%;
+    --whatsapp-outgoing: 168 35% 20%;
+    --whatsapp-incoming: 222 18% 17%;
+    --whatsapp-header: 222 18% 13%;
+    --whatsapp-sidebar: 222 18% 11%;
+    --whatsapp-hover: 222 15% 16%;
+    --whatsapp-selected: 168 30% 18%;
+    --whatsapp-unread: 142 70% 49%;
+    --whatsapp-time: 200 8% 55%;
+    --whatsapp-icon: 200 8% 60%;
 
     /* Chat specific */
-    --chat-bg: 222 20% 8%;
-    --chat-bubble-outgoing: 142 40% 25%;
-    --chat-bubble-incoming: 222 20% 15%;
-    --chat-input-bg: 222 20% 12%;
+    --chat-bg: 222 18% 8%;
+    --chat-bubble-outgoing: 168 35% 20%;
+    --chat-bubble-incoming: 222 18% 17%;
+    --chat-input-bg: 222 18% 13%;
     
     /* Sidebar */
-    --sidebar-background: 222 20% 10%;
-    --sidebar-foreground: 210 20% 95%;
-    --sidebar-primary: 142 70% 50%;
+    --sidebar-background: 222 18% 11%;
+    --sidebar-foreground: 200 15% 90%;
+    --sidebar-primary: 168 76% 42%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 15% 18%;
-    --sidebar-accent-foreground: 210 20% 95%;
-    --sidebar-border: 222 15% 18%;
-    --sidebar-ring: 142 70% 50%;
+    --sidebar-accent: 168 30% 18%;
+    --sidebar-accent-foreground: 200 15% 90%;
+    --sidebar-border: 222 12% 18%;
+    --sidebar-ring: 168 76% 42%;
     --sidebar-hover: 222 15% 15%;
     
     /* Status colors */
-    --status-new: 210 100% 60%;
-    --status-active: 142 70% 50%;
-    --status-resolved: 210 10% 50%;
+    --status-new: 199 98% 58%;
+    --status-active: 142 70% 49%;
+    --status-resolved: 200 8% 50%;
     
     /* Badge */
-    --badge-unread: 142 70% 50%;
+    --badge-unread: 142 70% 49%;
     --badge-foreground: 0 0% 100%;
     
     /* Online indicator */
