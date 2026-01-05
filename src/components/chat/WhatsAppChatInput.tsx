@@ -224,16 +224,16 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
   }
 
   return (
-    <div className="px-4 py-3 bg-[#202c33]">
-      <div className="flex items-end gap-2">
-        {/* Emoji button */}
+    <div className="px-2 md:px-4 py-2 md:py-3 bg-[#202c33] safe-area-bottom">
+      <div className="flex items-end gap-1.5 md:gap-2">
+        {/* Emoji button - hidden on small screens */}
         <Button
           variant="ghost"
           size="icon"
           disabled={disabled || uploading}
-          className="h-[52px] w-[52px] rounded-full text-[#8696a0] hover:text-[#e9edef] hover:bg-[#374045] flex-shrink-0"
+          className="hidden sm:flex h-11 md:h-[52px] w-11 md:w-[52px] rounded-full text-[#8696a0] hover:text-[#e9edef] hover:bg-[#374045] flex-shrink-0 transition-colors"
         >
-          <Smile className="h-[26px] w-[26px]" />
+          <Smile className="h-6 md:h-[26px] w-6 md:w-[26px]" />
         </Button>
 
         {/* Attachment button */}
@@ -244,18 +244,18 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
               size="icon"
               disabled={disabled || uploading}
               className={cn(
-                "h-[52px] w-[52px] rounded-full text-[#8696a0] hover:text-[#e9edef] hover:bg-[#374045] flex-shrink-0 transition-transform",
+                "h-11 md:h-[52px] w-11 md:w-[52px] rounded-full text-[#8696a0] hover:text-[#e9edef] hover:bg-[#374045] flex-shrink-0 transition-all duration-200",
                 attachOpen && "rotate-[135deg] text-[#00a884]"
               )}
             >
               {uploading ? (
-                <Loader2 className="h-[26px] w-[26px] animate-spin" />
+                <Loader2 className="h-6 md:h-[26px] w-6 md:w-[26px] animate-spin" />
               ) : (
-                <Paperclip className="h-[26px] w-[26px]" />
+                <Paperclip className="h-6 md:h-[26px] w-6 md:w-[26px]" />
               )}
             </Button>
           </PopoverTrigger>
-          <PopoverContent 
+          <PopoverContent
             side="top" 
             align="start"
             sideOffset={12}
@@ -286,7 +286,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
         </Popover>
 
         {/* Message input */}
-        <div className="flex-1 bg-[#2a3942] rounded-lg flex items-end min-h-[52px]">
+        <div className="flex-1 bg-[#2a3942] rounded-lg flex items-end min-h-[44px] md:min-h-[52px]">
           <textarea
             ref={textareaRef}
             value={message}
@@ -295,8 +295,8 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
             placeholder="Digite uma mensagem"
             disabled={disabled || uploading}
             rows={1}
-            className="flex-1 resize-none bg-transparent border-0 focus:ring-0 focus:outline-none text-[15px] text-[#d1d7db] placeholder:text-[#8696a0] px-4 py-[14px] max-h-[150px] leading-5"
-            style={{ minHeight: '52px' }}
+            className="flex-1 resize-none bg-transparent border-0 focus:ring-0 focus:outline-none text-[14px] md:text-[15px] text-[#d1d7db] placeholder:text-[#8696a0] px-3 md:px-4 py-3 md:py-[14px] max-h-[120px] md:max-h-[150px] leading-5"
+            style={{ minHeight: '44px' }}
           />
         </div>
 
@@ -305,14 +305,14 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
           onClick={message.trim() ? handleSend : startRecording}
           disabled={sending || disabled || uploading}
           size="icon"
-          className="h-[52px] w-[52px] rounded-full flex-shrink-0 bg-[#00a884] hover:bg-[#00a884]/90"
+          className="h-11 md:h-[52px] w-11 md:w-[52px] rounded-full flex-shrink-0 bg-[#00a884] hover:bg-[#00997a] active:scale-95 transition-all"
         >
           {sending || uploading ? (
-            <Loader2 className="h-6 w-6 animate-spin text-[#111b21]" />
+            <Loader2 className="h-5 md:h-6 w-5 md:w-6 animate-spin text-[#111b21]" />
           ) : message.trim() ? (
-            <Send className="h-6 w-6 text-[#111b21]" />
+            <Send className="h-5 md:h-6 w-5 md:w-6 text-[#111b21]" />
           ) : (
-            <Mic className="h-6 w-6 text-[#111b21]" />
+            <Mic className="h-5 md:h-6 w-5 md:w-6 text-[#111b21]" />
           )}
         </Button>
       </div>

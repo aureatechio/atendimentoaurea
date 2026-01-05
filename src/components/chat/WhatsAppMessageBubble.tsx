@@ -222,12 +222,12 @@ export function WhatsAppMessageBubble({
 
   return (
     <div 
-      className={cn('flex mb-[2px]', isFromAgent ? 'justify-end' : 'justify-start')}
+      className={cn('flex mb-[3px]', isFromAgent ? 'justify-end' : 'justify-start')}
       style={{ animationDelay: `${animationDelay}ms` }}
     >
       <div
         className={cn(
-          'relative max-w-[65%] rounded-lg px-[9px] py-[6px] shadow-sm',
+          'relative max-w-[85%] sm:max-w-[75%] md:max-w-[65%] rounded-lg px-[9px] py-[6px] shadow-sm',
           isFromAgent
             ? 'bg-[#005c4b] rounded-tr-none'
             : 'bg-[#202c33] rounded-tl-none'
@@ -238,11 +238,11 @@ export function WhatsAppMessageBubble({
         {renderMedia()}
         
         {messageType === 'text' && (
-          <div className="flex items-end gap-1 flex-wrap">
-            <p className="text-[14.2px] text-[#e9edef] whitespace-pre-wrap break-words leading-[19px]">
+          <div className="flex items-end gap-1.5 flex-wrap">
+            <p className="text-[14px] md:text-[14.2px] text-[#e9edef] whitespace-pre-wrap break-words leading-[19px]">
               {content}
             </p>
-            <span className="text-[11px] text-[#ffffff99] whitespace-nowrap ml-auto mb-[1px] flex items-center gap-1 tabular-nums">
+            <span className="text-[10px] md:text-[11px] text-[#ffffff99] whitespace-nowrap ml-auto mb-[1px] flex items-center gap-1 tabular-nums select-none">
               {formatTime(createdAt)}
               <MessageStatusIcon status={status} isFromAgent={isFromAgent} />
             </span>

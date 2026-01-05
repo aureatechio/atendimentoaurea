@@ -300,3 +300,34 @@
 .typing-dot:nth-child(1) { animation-delay: 0s; }
 .typing-dot:nth-child(2) { animation-delay: 0.15s; }
 .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+/* Safe area for mobile devices */
+.safe-area-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
+}
+
+/* Better touch targets for mobile */
+@media (hover: none) and (pointer: coarse) {
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Prevent text selection on UI elements */
+.select-none {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Smooth transitions */
+.transition-smooth {
+  transition: all 0.15s ease-out;
+}
+
+/* Active states for mobile */
+@media (hover: none) {
+  .active\:bg-\[#2a3942\]:active {
+    background-color: #2a3942;
+  }
+}
