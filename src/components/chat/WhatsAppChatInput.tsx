@@ -11,10 +11,6 @@ import {
   X, 
   Loader2, 
   Smile,
-  Camera,
-  Users,
-  Sticker,
-  Square
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -36,12 +32,10 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
   const [recordingTime, setRecordingTime] = useState(0);
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Auto-resize textarea
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
@@ -58,12 +52,10 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
     try {
       await onSendMessage(message.trim());
       setMessage('');
-      
-      // Reset textarea height
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
-    } catch (error) {
+    } catch {
       toast.error('Erro ao enviar mensagem');
     } finally {
       setSending(false);
@@ -81,7 +73,6 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file size (max 16MB)
     if (file.size > 16 * 1024 * 1024) {
       toast.error('Arquivo muito grande. Máximo 16MB');
       return;
@@ -103,15 +94,11 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
         .getPublicUrl(data.path);
 
       await onSendMedia(type, urlData.publicUrl, file.name);
-      toast.success('Mídia enviada com sucesso!');
-    } catch (err) {
-      console.error('Upload error:', err);
+      toast.success('Mídia enviada!');
+    } catch {
       toast.error('Erro ao enviar mídia');
     } finally {
       setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
     }
   };
 
@@ -122,9 +109,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
-      mediaRecorder.ondataavailable = (e) => {
-        audioChunksRef.current.push(e.data);
-      };
+      mediaRecorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/ogg' });
@@ -147,8 +132,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
 
           await onSendMedia('audio', urlData.publicUrl);
           toast.success('Áudio enviado!');
-        } catch (err) {
-          console.error('Upload error:', err);
+        } catch {
           toast.error('Erro ao enviar áudio');
         } finally {
           setUploading(false);
@@ -162,8 +146,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
       recordingIntervalRef.current = setInterval(() => {
         setRecordingTime(t => t + 1);
       }, 1000);
-    } catch (err) {
-      console.error('Recording error:', err);
+    } catch {
       toast.error('Erro ao acessar microfone');
     }
   };
@@ -196,49 +179,44 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Attachment options
   const attachmentOptions = [
-    { type: 'image', icon: Image, label: 'Fotos', accept: 'image/*', gradient: 'from-violet-500 to-purple-600' },
-    { type: 'video', icon: Video, label: 'Vídeos', accept: 'video/*', gradient: 'from-rose-500 to-pink-600' },
-    { type: 'document', icon: FileText, label: 'Documento', accept: '.pdf,.doc,.docx,.xls,.xlsx,.txt', gradient: 'from-blue-500 to-indigo-600' },
-    { type: 'camera', icon: Camera, label: 'Câmera', disabled: true, gradient: 'from-pink-500 to-rose-600' },
-    { type: 'contact', icon: Users, label: 'Contato', disabled: true, gradient: 'from-cyan-500 to-teal-600' },
-    { type: 'sticker', icon: Sticker, label: 'Figurinha', disabled: true, gradient: 'from-emerald-500 to-green-600' },
+    { type: 'image', icon: Image, label: 'Fotos', accept: 'image/*', color: 'bg-[#bf59cf]' },
+    { type: 'video', icon: Video, label: 'Vídeos', accept: 'video/*', color: 'bg-[#ee4a62]' },
+    { type: 'document', icon: FileText, label: 'Documento', accept: '.pdf,.doc,.docx,.xls,.xlsx,.txt', color: 'bg-[#5157ae]' },
   ];
 
   if (isRecording) {
     return (
-      <div className="px-4 py-3 bg-[hsl(var(--whatsapp-panel-bg))] border-t border-border/30 animate-fade-in">
+      <div className="px-4 py-3 bg-[#202c33]">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
             size="icon"
             onClick={cancelRecording}
-            className="h-12 w-12 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive transition-all active:scale-95"
+            className="h-12 w-12 rounded-full text-[#f15c6d] hover:bg-[#f15c6d]/10"
           >
             <X className="h-6 w-6" />
           </Button>
           
-          <div className="flex-1 flex items-center gap-4 bg-background rounded-full px-5 py-3 elevation-1">
-            <div className="h-3 w-3 rounded-full bg-destructive animate-pulse" />
-            <span className="text-base font-medium text-foreground tabular-nums min-w-[45px]">
+          <div className="flex-1 flex items-center gap-4 bg-[#2a3942] rounded-full px-5 py-3">
+            <div className="h-3 w-3 rounded-full bg-[#f15c6d] animate-pulse" />
+            <span className="text-base text-[#e9edef] tabular-nums min-w-[45px]">
               {formatTime(recordingTime)}
             </span>
-            <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+            <div className="flex-1 h-1 bg-[#374045] rounded-full overflow-hidden">
               <div 
-                className="h-full bg-primary rounded-full transition-all duration-1000 ease-linear"
+                className="h-full bg-[#00a884] rounded-full transition-all"
                 style={{ width: `${Math.min((recordingTime / 60) * 100, 100)}%` }} 
               />
             </div>
-            <span className="text-xs text-muted-foreground">Gravando...</span>
           </div>
           
           <Button
             onClick={stopRecording}
             size="icon"
-            className="h-12 w-12 rounded-full bg-primary hover:bg-primary/90 transition-all active:scale-95 fab-shadow"
+            className="h-12 w-12 rounded-full bg-[#00a884] hover:bg-[#00a884]/90"
           >
-            <Send className="h-5 w-5 text-primary-foreground" />
+            <Send className="h-5 w-5 text-[#111b21]" />
           </Button>
         </div>
       </div>
@@ -246,16 +224,16 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
   }
 
   return (
-    <div className="px-4 py-3 bg-[hsl(var(--whatsapp-panel-bg))] border-t border-border/30">
+    <div className="px-4 py-3 bg-[#202c33]">
       <div className="flex items-end gap-2">
         {/* Emoji button */}
         <Button
           variant="ghost"
           size="icon"
           disabled={disabled || uploading}
-          className="h-12 w-12 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200 flex-shrink-0 active:scale-95"
+          className="h-[52px] w-[52px] rounded-full text-[#8696a0] hover:text-[#e9edef] hover:bg-[#374045] flex-shrink-0"
         >
-          <Smile className="h-6 w-6" />
+          <Smile className="h-[26px] w-[26px]" />
         </Button>
 
         {/* Attachment button */}
@@ -266,14 +244,14 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
               size="icon"
               disabled={disabled || uploading}
               className={cn(
-                "h-12 w-12 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground flex-shrink-0 transition-all duration-300 active:scale-95",
-                attachOpen && "rotate-[135deg] text-primary"
+                "h-[52px] w-[52px] rounded-full text-[#8696a0] hover:text-[#e9edef] hover:bg-[#374045] flex-shrink-0 transition-transform",
+                attachOpen && "rotate-[135deg] text-[#00a884]"
               )}
             >
               {uploading ? (
-                <Loader2 className="h-6 w-6 animate-spin" />
+                <Loader2 className="h-[26px] w-[26px] animate-spin" />
               ) : (
-                <Paperclip className="h-6 w-6" />
+                <Paperclip className="h-[26px] w-[26px]" />
               )}
             </Button>
           </PopoverTrigger>
@@ -281,39 +259,25 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
             side="top" 
             align="start"
             sideOffset={12}
-            className="w-auto p-5 bg-background border-border elevation-3 rounded-2xl animate-scale-in"
+            className="w-auto p-4 bg-[#233138] border-none shadow-2xl rounded-xl"
           >
-            <div className="grid grid-cols-3 gap-6">
+            <div className="flex gap-4">
               {attachmentOptions.map((option) => (
-                <label 
-                  key={option.type} 
-                  className={cn(
-                    "cursor-pointer group",
-                    option.disabled && "opacity-40 cursor-not-allowed pointer-events-none"
-                  )}
-                >
-                  {!option.disabled && (
-                    <input
-                      type="file"
-                      accept={option.accept}
-                      className="hidden"
-                      onChange={(e) => handleFileSelect(e, option.type)}
-                    />
-                  )}
+                <label key={option.type} className="cursor-pointer group">
+                  <input
+                    type="file"
+                    accept={option.accept}
+                    className="hidden"
+                    onChange={(e) => handleFileSelect(e, option.type)}
+                  />
                   <div className="flex flex-col items-center gap-2">
                     <div className={cn(
-                      "h-14 w-14 rounded-full flex items-center justify-center transition-transform shadow-lg bg-gradient-to-br",
-                      option.gradient,
-                      !option.disabled && "group-hover:scale-110 group-active:scale-95"
+                      "h-[53px] w-[53px] rounded-full flex items-center justify-center shadow-lg transition-transform group-hover:scale-110",
+                      option.color
                     )}>
-                      <option.icon className="h-6 w-6 text-white" />
+                      <option.icon className="h-[26px] w-[26px] text-white" />
                     </div>
-                    <span className={cn(
-                      "text-[13px] text-muted-foreground transition-colors font-medium",
-                      !option.disabled && "group-hover:text-foreground"
-                    )}>
-                      {option.label}
-                    </span>
+                    <span className="text-[12px] text-[#8696a0]">{option.label}</span>
                   </div>
                 </label>
               ))}
@@ -322,7 +286,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
         </Popover>
 
         {/* Message input */}
-        <div className="flex-1 bg-background rounded-3xl flex items-end min-h-[48px] elevation-1 transition-all duration-200 focus-within:elevation-2 focus-within:ring-2 focus-within:ring-primary/20">
+        <div className="flex-1 bg-[#2a3942] rounded-lg flex items-end min-h-[52px]">
           <textarea
             ref={textareaRef}
             value={message}
@@ -331,31 +295,24 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
             placeholder="Digite uma mensagem"
             disabled={disabled || uploading}
             rows={1}
-            className="flex-1 resize-none bg-transparent border-0 focus:ring-0 focus:outline-none text-[15px] text-foreground placeholder:text-muted-foreground px-5 py-3 max-h-[150px] leading-5"
-            style={{ minHeight: '48px' }}
+            className="flex-1 resize-none bg-transparent border-0 focus:ring-0 focus:outline-none text-[15px] text-[#d1d7db] placeholder:text-[#8696a0] px-4 py-[14px] max-h-[150px] leading-5"
+            style={{ minHeight: '52px' }}
           />
         </div>
 
-        {/* Send or Record button - ALWAYS VISIBLE */}
+        {/* Send or Record button */}
         <Button
           onClick={message.trim() ? handleSend : startRecording}
           disabled={sending || disabled || uploading}
           size="icon"
-          className={cn(
-            "h-12 w-12 rounded-full flex-shrink-0 transition-all duration-200 active:scale-95 fab-shadow",
-            message.trim() 
-              ? "bg-primary hover:bg-primary/90" 
-              : "bg-primary hover:bg-primary/90"
-          )}
+          className="h-[52px] w-[52px] rounded-full flex-shrink-0 bg-[#00a884] hover:bg-[#00a884]/90"
         >
-          {sending ? (
-            <Loader2 className="h-5 w-5 animate-spin text-primary-foreground" />
-          ) : uploading ? (
-            <Loader2 className="h-5 w-5 animate-spin text-primary-foreground" />
+          {sending || uploading ? (
+            <Loader2 className="h-6 w-6 animate-spin text-[#111b21]" />
           ) : message.trim() ? (
-            <Send className="h-5 w-5 text-primary-foreground" />
+            <Send className="h-6 w-6 text-[#111b21]" />
           ) : (
-            <Mic className="h-5 w-5 text-primary-foreground" />
+            <Mic className="h-6 w-6 text-[#111b21]" />
           )}
         </Button>
       </div>

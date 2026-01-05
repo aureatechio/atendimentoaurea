@@ -7,14 +7,12 @@ export function MessageSkeleton({ isOutgoing = false }: { isOutgoing?: boolean }
       <div
         className={cn(
           'rounded-lg px-3 py-2 space-y-2',
-          isOutgoing
-            ? 'bg-[hsl(var(--chat-bubble-outgoing))]'
-            : 'bg-[hsl(var(--chat-bubble-incoming))]'
+          isOutgoing ? 'bg-[#005c4b]' : 'bg-[#202c33]'
         )}
       >
-        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-4 w-40 bg-[#2a3942]" />
         <div className="flex justify-end">
-          <Skeleton className="h-3 w-12" />
+          <Skeleton className="h-3 w-12 bg-[#2a3942]" />
         </div>
       </div>
     </div>

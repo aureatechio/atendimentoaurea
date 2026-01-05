@@ -33,18 +33,18 @@ export function EmptyState({ type, searchQuery, className }: EmptyStateProps) {
 
   return (
     <div className={cn(
-      'flex flex-col items-center justify-center text-center px-8 py-12 animate-fade-in',
+      'flex flex-col items-center justify-center text-center px-8 py-12',
       className
     )}>
-      <div className="w-16 h-16 rounded-full bg-[hsl(var(--whatsapp-hover))] flex items-center justify-center mb-4">
-        <Icon className="w-8 h-8 text-[hsl(var(--whatsapp-icon))]" />
+      <div className="w-16 h-16 rounded-full bg-[#2a3942] flex items-center justify-center mb-4">
+        <Icon className="w-8 h-8 text-[#8696a0]" />
       </div>
-      <h3 className="text-lg font-medium text-foreground mb-1">{title}</h3>
-      <p className="text-sm text-[hsl(var(--whatsapp-time))] mb-2 max-w-[250px]">
+      <h3 className="text-lg font-medium text-[#e9edef] mb-1">{title}</h3>
+      <p className="text-sm text-[#8696a0] mb-2 max-w-[250px]">
         {description}
       </p>
       {hint && (
-        <p className="text-xs text-[hsl(var(--whatsapp-icon))]">{hint}</p>
+        <p className="text-xs text-[#667781]">{hint}</p>
       )}
     </div>
   );
