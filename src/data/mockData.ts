@@ -36,7 +36,7 @@ export const agents: User[] = [
 ];
 
 // Contacts
-const contacts: Contact[] = [
+export const contacts: Contact[] = [
   { id: 'contact-1', name: 'Carlos Mendes', phone: '+55 11 99999-1234', tags: ['Suporte'] },
   { id: 'contact-2', name: 'Fernanda Lima', phone: '+55 21 98888-5678', tags: ['Vendas'] },
   { id: 'contact-3', name: 'Roberto Alves', phone: '+55 31 97777-9012', tags: ['Financeiro'] },

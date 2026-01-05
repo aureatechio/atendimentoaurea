@@ -2,9 +2,13 @@ import { ConversationsSidebar } from '@/components/chat/ConversationsSidebar';
 import { ChatArea } from '@/components/chat/ChatArea';
 import { ControlPanel } from '@/components/chat/ControlPanel';
 import { useChatStore } from '@/stores/chatStore';
+import { useMessageSimulation } from '@/hooks/useMessageSimulation';
 
 export function ChatLayout() {
   const selectedConversationId = useChatStore((state) => state.selectedConversationId);
+  
+  // Enable message simulation for demo
+  useMessageSimulation(true);
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
