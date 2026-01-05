@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Conversation, Message, ConversationFilter, ConversationStatus } from '@/types/chat';
-import { conversations as initialConversations, messagesByConversation, currentUser, agents } from '@/data/mockData';
+import { conversations as initialConversations, messagesByConversation, currentUser, agents, contacts } from '@/data/mockData';
+import { playNotificationSound } from '@/lib/notificationSound';
 
 interface ChatState {
   // Data
@@ -24,6 +25,7 @@ interface ChatState {
   
   // Message actions
   sendMessage: (conversationId: string, content: string) => void;
+  receiveMessage: (conversationId: string, content: string) => void;
   markAsRead: (conversationId: string) => void;
   
   // Conversation actions
@@ -38,6 +40,10 @@ interface ChatState {
   getSelectedConversation: () => Conversation | undefined;
   getMessages: (conversationId: string) => Message[];
   canSendMessage: (conversationId: string) => { allowed: boolean; reason?: string };
+  
+  // Simulation
+  startSimulation: () => void;
+  stopSimulation: () => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -190,6 +196,50 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
   
+  // Receive message from client (with notification)
+  receiveMessage: (conversationId, content) => {
+    const { messages, conversations, selectedConversationId } = get();
+    const conversation = conversations.find(c => c.id === conversationId);
+    
+    if (!conversation) return;
+    
+    const newMessage: Message = {
+      id: `msg-${Date.now()}-client`,
+      conversationId,
+      content,
+      type: 'text',
+      isFromClient: true,
+      senderId: conversation.contact.id,
+      status: 'delivered',
+      createdAt: new Date(),
+    };
+    
+    const conversationMessages = messages[conversationId] || [];
+    const isSelected = selectedConversationId === conversationId;
+    
+    set({
+      messages: {
+        ...messages,
+        [conversationId]: [...conversationMessages, newMessage],
+      },
+      conversations: conversations.map(c => 
+        c.id === conversationId 
+          ? { 
+              ...c, 
+              lastMessage: newMessage, 
+              updatedAt: new Date(),
+              unreadCount: isSelected ? 0 : c.unreadCount + 1,
+            }
+          : c
+      ),
+    });
+    
+    // Play notification sound if not viewing this conversation
+    if (!isSelected) {
+      playNotificationSound();
+    }
+  },
+  
   // Computed
   getFilteredConversations: () => {
     const { conversations, filter, searchQuery } = get();
@@ -245,5 +295,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
     
     return { allowed: true };
+  },
+  
+  // Simulation controls
+  startSimulation: () => {
+    // This will be controlled from a hook
+  },
+  
+  stopSimulation: () => {
+    // This will be controlled from a hook
   },
 }));
