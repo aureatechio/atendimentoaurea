@@ -156,12 +156,35 @@ async function handleReceivedMessage(supabase: any, data: any) {
         media_url: mediaUrl,
         media_mime_type: mediaMimeType,
         media_caption: mediaCaption,
+        created_at: messageTimestamp,
       })
       .select()
       .single();
     
     if (msgError) throw msgError;
     console.log(`✅ Message saved (${senderType}):`, message.id);
+    
+    // Update conversation last_message and unread_count
+    const updateData: any = {
+      last_message: content,
+      last_message_at: messageTimestamp,
+    };
+    
+    // Only increment unread for customer messages
+    if (senderType === 'customer') {
+      updateData.unread_count = (conversation.unread_count || 0) + 1;
+    }
+    
+    const { error: updateError } = await supabase
+      .from('conversations')
+      .update(updateData)
+      .eq('id', conversation.id);
+    
+    if (updateError) {
+      console.error('⚠️ Error updating conversation:', updateError);
+    } else {
+      console.log('✅ Conversation updated');
+    }
   } catch (err) {
     console.error('❌ Failed to process message:', err);
   }
