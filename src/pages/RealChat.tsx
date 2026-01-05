@@ -12,13 +12,7 @@ import {
   Download,
   MoreVertical,
   ArrowLeft,
-  Phone,
-  Video,
   X,
-  MessageSquare,
-  Check,
-  CheckCheck,
-  Filter
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek, formatDistanceToNow } from 'date-fns';
@@ -44,32 +38,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-
-// Status indicator component
-function OnlineStatus({ isOnline }: { isOnline?: boolean }) {
-  return (
-    <span className={cn(
-      "absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background",
-      isOnline ? "bg-[hsl(var(--status-online))]" : "bg-[hsl(var(--status-offline))]"
-    )} />
-  );
-}
-
-// Message status for conversation list
-function LastMessageStatus({ status }: { status?: string }) {
-  if (!status) return null;
-  
-  switch (status) {
-    case 'read':
-      return <CheckCheck className="h-4 w-4 text-[hsl(var(--status-read))] flex-shrink-0" />;
-    case 'delivered':
-      return <CheckCheck className="h-4 w-4 text-[hsl(var(--whatsapp-icon))] flex-shrink-0" />;
-    case 'sent':
-      return <Check className="h-4 w-4 text-[hsl(var(--whatsapp-icon))] flex-shrink-0" />;
-    default:
-      return null;
-  }
-}
 
 export default function RealChat() {
   const { conversations, loading: convLoading, markAsRead, refetch } = useRealConversations();
@@ -186,14 +154,11 @@ export default function RealChat() {
           {/* Header */}
           <header className="h-16 px-4 flex items-center justify-between bg-[hsl(var(--whatsapp-header))] border-b border-border/30">
             <div className="flex items-center gap-3">
-              <div className="relative">
-                <Avatar className="h-10 w-10 cursor-pointer transition-all duration-200 hover:ring-2 hover:ring-primary/30">
-                  <AvatarFallback className="bg-primary text-primary-foreground font-medium">
-                    A
-                  </AvatarFallback>
-                </Avatar>
-                <OnlineStatus isOnline={true} />
-              </div>
+              <Avatar className="h-10 w-10 cursor-pointer transition-all duration-200 hover:ring-2 hover:ring-primary/30">
+                <AvatarFallback className="bg-primary text-primary-foreground font-medium">
+                  A
+                </AvatarFallback>
+              </Avatar>
               <div className="hidden sm:block">
                 <h1 className="text-sm font-medium text-foreground">Atendimento</h1>
                 <p className="text-xs text-muted-foreground">
@@ -246,15 +211,6 @@ export default function RealChat() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56 animate-scale-in">
-                  <DropdownMenuItem className="cursor-pointer py-3">
-                    <MessageSquare className="h-4 w-4 mr-3" />
-                    Nova conversa
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="cursor-pointer py-3">
-                    <Filter className="h-4 w-4 mr-3" />
-                    Filtrar conversas
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
                   <DropdownMenuItem asChild className="cursor-pointer py-3">
                     <Link to="/whatsapp" className="flex items-center">
                       <Settings className="h-4 w-4 mr-3" />
@@ -329,7 +285,7 @@ export default function RealChat() {
                   )}
                   style={{ animationDelay: `${index * 20}ms` }}
                 >
-                  {/* Avatar with online status */}
+                  {/* Avatar */}
                   <div className="relative flex-shrink-0">
                     <Avatar className="h-12 w-12 transition-transform group-hover:scale-105">
                       {conv.avatar_url && <AvatarImage src={conv.avatar_url} className="object-cover" />}
@@ -337,8 +293,6 @@ export default function RealChat() {
                         {(conv.name || conv.phone).slice(0, 1).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
-                    {/* Random online status for demo */}
-                    {index % 3 === 0 && <OnlineStatus isOnline={true} />}
                   </div>
                   
                   {/* Content */}
@@ -356,7 +310,6 @@ export default function RealChat() {
                     </div>
                     <div className="flex items-center justify-between mt-0.5 gap-2">
                       <div className="flex items-center gap-1 flex-1 min-w-0">
-                        <LastMessageStatus status="delivered" />
                         <p className="text-sm text-muted-foreground truncate">
                           {conv.last_message || 'Nenhuma mensagem'}
                         </p>
@@ -418,7 +371,6 @@ export default function RealChat() {
                       {(selectedConversation.name || selectedConversation.phone).slice(0, 1).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <OnlineStatus isOnline={true} />
                 </div>
                 
                 {/* Contact Info */}
@@ -427,57 +379,12 @@ export default function RealChat() {
                     {selectedConversation.name || selectedConversation.phone}
                   </h2>
                   <p className="text-xs text-muted-foreground truncate">
-                    Online agora
+                    {selectedConversation.phone}
                   </p>
                 </div>
                 
                 {/* Header Actions */}
                 <div className="flex items-center gap-0.5">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-10 w-10 rounded-full text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))] hover:text-foreground transition-all duration-200 active:scale-95"
-                      >
-                        <Video className="h-5 w-5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      <p>Chamada de vídeo</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-10 w-10 rounded-full text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))] hover:text-foreground transition-all duration-200 active:scale-95"
-                      >
-                        <Phone className="h-5 w-5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      <p>Chamada de voz</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-10 w-10 rounded-full text-[hsl(var(--whatsapp-icon))] hover:bg-[hsl(var(--whatsapp-hover))] hover:text-foreground transition-all duration-200 active:scale-95"
-                      >
-                        <Search className="h-5 w-5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      <p>Pesquisar mensagens</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button 
@@ -489,15 +396,11 @@ export default function RealChat() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56 animate-scale-in">
-                      <DropdownMenuItem className="cursor-pointer py-3">
-                        Dados do contato
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="cursor-pointer py-3">
-                        Mídia, links e docs
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="cursor-pointer py-3 text-destructive focus:text-destructive">
-                        Bloquear contato
+                      <DropdownMenuItem asChild className="cursor-pointer py-3">
+                        <Link to="/whatsapp" className="flex items-center">
+                          <Settings className="h-4 w-4 mr-3" />
+                          Configurações Z-API
+                        </Link>
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
