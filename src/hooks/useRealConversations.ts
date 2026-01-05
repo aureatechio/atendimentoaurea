@@ -136,13 +136,15 @@ export function useRealMessages(conversationId: string | null) {
 
   const fetchMessages = useCallback(async () => {
     if (!conversationId) {
+      setError(null);
       setMessages([]);
+      setLoading(false);
       return;
     }
 
     setLoading(true);
     setError(null);
-    
+
     try {
       const { data, error: fetchError } = await supabase
         .from('messages')
@@ -151,7 +153,7 @@ export function useRealMessages(conversationId: string | null) {
         .order('created_at', { ascending: true });
 
       if (fetchError) throw fetchError;
-      
+
       setMessages((data || []).map(m => ({
         ...m,
         sender_type: m.sender_type as 'customer' | 'agent',
@@ -163,6 +165,7 @@ export function useRealMessages(conversationId: string | null) {
     } catch (err) {
       console.error('Error fetching messages:', err);
       setError('Erro ao carregar mensagens');
+      setMessages([]);
     } finally {
       setLoading(false);
     }
