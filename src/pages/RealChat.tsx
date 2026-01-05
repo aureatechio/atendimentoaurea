@@ -173,28 +173,28 @@ export default function RealChat() {
   const totalUnread = conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0);
 
   return (
-    <div className="flex h-screen bg-[#0b141a]">
+    <div className="flex h-screen bg-[#0b141a] overflow-hidden">
       {/* Left Panel - Conversations */}
       <div className={cn(
-        "w-full md:w-[400px] lg:w-[420px] flex flex-col bg-[#111b21] border-r border-[#222d34]",
-        selectedConversation && "hidden md:flex"
+        "w-full md:w-[380px] lg:w-[420px] flex flex-col bg-[#111b21] border-r border-[#222d34] transition-transform duration-200 ease-out",
+        selectedConversation ? "hidden md:flex" : "flex"
       )}>
         {/* Header */}
-        <header className="h-[59px] px-4 flex items-center justify-between bg-[#202c33]">
-          <Avatar className="h-10 w-10">
-            <AvatarFallback className="bg-[#6a7175] text-white text-sm">A</AvatarFallback>
+        <header className="h-[59px] px-3 md:px-4 flex items-center justify-between bg-[#202c33] flex-shrink-0">
+          <Avatar className="h-10 w-10 cursor-pointer hover:opacity-80 transition-opacity">
+            <AvatarFallback className="bg-[#6a7175] text-white text-sm font-medium">A</AvatarFallback>
           </Avatar>
           
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 md:gap-1">
             <Button 
               variant="ghost" 
               size="icon" 
               onClick={handleSync} 
               disabled={syncing}
               title="Sincronizar conversas"
-              className="h-10 w-10 rounded-full text-[#aebac1] hover:bg-[#374045] hover:text-[#e9edef]"
+              className="h-9 w-9 md:h-10 md:w-10 rounded-full text-[#aebac1] hover:bg-[#374045] hover:text-[#e9edef] transition-colors"
             >
-              {syncing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+              {syncing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-[22px] w-[22px]" />}
             </Button>
 
             <Button 
@@ -203,9 +203,9 @@ export default function RealChat() {
               onClick={handleSyncHistory} 
               disabled={syncing}
               title="Sincronizar histórico de mensagens"
-              className="h-10 w-10 rounded-full text-[#aebac1] hover:bg-[#374045] hover:text-[#e9edef]"
+              className="h-9 w-9 md:h-10 md:w-10 rounded-full text-[#aebac1] hover:bg-[#374045] hover:text-[#e9edef] transition-colors"
             >
-              <History className="h-5 w-5" />
+              <History className="h-[22px] w-[22px]" />
             </Button>
             
             <Button 
@@ -213,9 +213,9 @@ export default function RealChat() {
               size="icon" 
               onClick={refetch} 
               title="Recarregar lista"
-              className="h-10 w-10 rounded-full text-[#aebac1] hover:bg-[#374045] hover:text-[#e9edef]"
+              className="h-9 w-9 md:h-10 md:w-10 rounded-full text-[#aebac1] hover:bg-[#374045] hover:text-[#e9edef] transition-colors"
             >
-              <RefreshCw className="h-5 w-5" />
+              <RefreshCw className="h-[22px] w-[22px]" />
             </Button>
             
             <DropdownMenu>
@@ -223,9 +223,9 @@ export default function RealChat() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="h-10 w-10 rounded-full text-[#aebac1] hover:bg-[#374045] hover:text-[#e9edef]"
+                  className="h-9 w-9 md:h-10 md:w-10 rounded-full text-[#aebac1] hover:bg-[#374045] hover:text-[#e9edef] transition-colors"
                 >
-                  <MoreVertical className="h-5 w-5" />
+                  <MoreVertical className="h-[22px] w-[22px]" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52 bg-[#233138] border-none shadow-xl">
@@ -241,22 +241,22 @@ export default function RealChat() {
         </header>
 
         {/* Search */}
-        <div className="px-3 py-2 bg-[#111b21]">
+        <div className="px-2 md:px-3 py-2 bg-[#111b21]">
           <div className={cn(
-            "flex items-center rounded-lg bg-[#202c33] transition-colors",
-            showSearch && "bg-[#2a3942]"
+            "flex items-center rounded-lg bg-[#202c33] transition-all duration-150",
+            showSearch && "bg-[#2a3942] ring-1 ring-[#00a884]/30"
           )}>
-            <div className="pl-4 pr-3 py-2">
+            <button 
+              className="pl-3 md:pl-4 pr-2 md:pr-3 py-2 focus:outline-none"
+              onClick={() => showSearch && (setShowSearch(false), setSearchQuery(''))}
+            >
               {showSearch ? (
-                <ArrowLeft 
-                  className="h-5 w-5 text-[#00a884] cursor-pointer" 
-                  onClick={() => { setShowSearch(false); setSearchQuery(''); }}
-                />
+                <ArrowLeft className="h-5 w-5 text-[#00a884] transition-colors" />
               ) : (
                 <Search className="h-5 w-5 text-[#8696a0]" />
               )}
-            </div>
-            <Input 
+            </button>
+            <Input
               ref={searchInputRef}
               placeholder="Pesquisar"
               value={searchQuery}
@@ -278,7 +278,7 @@ export default function RealChat() {
         </div>
 
         {/* Conversations List */}
-        <div className="flex-1 overflow-y-auto scrollbar-thin">
+        <div className="flex-1 overflow-y-auto scrollbar-thin overscroll-contain">
           {convLoading ? (
             <ConversationListSkeleton />
           ) : filteredConversations.length === 0 ? (
@@ -292,35 +292,35 @@ export default function RealChat() {
                 key={conv.id}
                 onClick={() => handleSelectConversation(conv)}
                 className={cn(
-                  'w-full flex items-center px-3 py-3 hover:bg-[#202c33] transition-colors',
+                  'w-full flex items-center px-2 md:px-3 py-2.5 md:py-3 hover:bg-[#202c33] transition-colors active:bg-[#2a3942]',
                   selectedConversation?.id === conv.id && 'bg-[#2a3942]'
                 )}
               >
-                <Avatar className="h-[49px] w-[49px] mr-3 flex-shrink-0">
-                  {conv.avatar_url && <AvatarImage src={conv.avatar_url} />}
-                  <AvatarFallback className="bg-[#6a7175] text-white text-lg">
+                <Avatar className="h-12 w-12 md:h-[49px] md:w-[49px] mr-2.5 md:mr-3 flex-shrink-0">
+                  {conv.avatar_url && <AvatarImage src={conv.avatar_url} className="object-cover" />}
+                  <AvatarFallback className="bg-[#6a7175] text-white text-base md:text-lg font-medium">
                     {(conv.name || conv.phone).charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 
-                <div className="flex-1 min-w-0 border-b border-[#222d34] pb-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[17px] text-[#e9edef] truncate">
+                <div className="flex-1 min-w-0 border-b border-[#222d34] pb-2.5 md:pb-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[15px] md:text-[17px] text-[#e9edef] truncate font-normal">
                       {conv.name || conv.phone}
                     </span>
                     <span className={cn(
-                      'text-xs ml-2 flex-shrink-0',
-                      conv.unread_count > 0 ? 'text-[#00a884]' : 'text-[#8696a0]'
+                      'text-[11px] md:text-xs flex-shrink-0 tabular-nums',
+                      conv.unread_count > 0 ? 'text-[#00a884] font-medium' : 'text-[#8696a0]'
                     )}>
                       {formatMessageTime(conv.last_message_at)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between mt-0.5">
-                    <p className="text-sm text-[#8696a0] truncate pr-2">
+                  <div className="flex items-center justify-between mt-1 gap-2">
+                    <p className="text-[13px] md:text-sm text-[#8696a0] truncate flex-1">
                       {conv.last_message || 'Nenhuma mensagem'}
                     </p>
                     {conv.unread_count > 0 && (
-                      <Badge className="h-5 min-w-5 px-1.5 text-xs font-medium bg-[#00a884] hover:bg-[#00a884] text-[#111b21] rounded-full">
+                      <Badge className="h-[18px] md:h-5 min-w-[18px] md:min-w-5 px-1 md:px-1.5 text-[10px] md:text-xs font-semibold bg-[#00a884] hover:bg-[#00a884] text-[#111b21] rounded-full flex-shrink-0">
                         {conv.unread_count > 99 ? '99+' : conv.unread_count}
                       </Badge>
                     )}
@@ -334,8 +334,8 @@ export default function RealChat() {
 
       {/* Right Panel - Chat */}
       <div className={cn(
-        "flex-1 flex flex-col bg-[#0b141a]",
-        !selectedConversation && "hidden md:flex"
+        "flex-1 flex flex-col bg-[#0b141a] min-w-0",
+        !selectedConversation ? "hidden md:flex" : "flex"
       )}>
         {!selectedConversation ? (
           /* Empty State */
@@ -358,41 +358,41 @@ export default function RealChat() {
         ) : (
           <>
             {/* Chat Header */}
-            <header className="h-[59px] px-4 flex items-center gap-3 bg-[#202c33]">
+            <header className="h-[59px] px-2 md:px-4 flex items-center gap-2 md:gap-3 bg-[#202c33] flex-shrink-0">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setSelectedConversation(null)}
-                className="md:hidden h-10 w-10 rounded-full text-[#aebac1] hover:bg-[#374045]"
+                className="md:hidden h-9 w-9 rounded-full text-[#aebac1] hover:bg-[#374045] active:bg-[#374045] flex-shrink-0"
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               
-              <Avatar className="h-10 w-10">
+              <Avatar className="h-9 w-9 md:h-10 md:w-10 flex-shrink-0">
                 {selectedConversation.avatar_url && (
-                  <AvatarImage src={selectedConversation.avatar_url} />
+                  <AvatarImage src={selectedConversation.avatar_url} className="object-cover" />
                 )}
-                <AvatarFallback className="bg-[#6a7175] text-white">
+                <AvatarFallback className="bg-[#6a7175] text-white text-sm md:text-base font-medium">
                   {(selectedConversation.name || selectedConversation.phone).charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               
-              <div className="flex-1 min-w-0">
-                <h2 className="text-[16px] text-[#e9edef] truncate">
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <h2 className="text-[15px] md:text-[16px] text-[#e9edef] truncate font-normal">
                   {selectedConversation.name || selectedConversation.phone}
                 </h2>
-                <p className="text-[13px] text-[#8696a0] truncate">
+                <p className="text-[12px] md:text-[13px] text-[#8696a0] truncate">
                   {selectedConversation.phone}
                 </p>
               </div>
               
-              <div className="flex items-center gap-1">
+              <div className="flex items-center flex-shrink-0">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button 
                       variant="ghost" 
                       size="icon" 
-                      className="h-10 w-10 rounded-full text-[#aebac1] hover:bg-[#374045] hover:text-[#e9edef]"
+                      className="h-9 w-9 md:h-10 md:w-10 rounded-full text-[#aebac1] hover:bg-[#374045] hover:text-[#e9edef] transition-colors"
                     >
                       <MoreVertical className="h-5 w-5" />
                     </Button>
@@ -412,7 +412,7 @@ export default function RealChat() {
             {/* Messages Area */}
             <div
               key={selectedConversation.id}
-              className="flex-1 overflow-y-auto px-[5%] lg:px-[8%] xl:px-[12%] py-4 scrollbar-thin chat-pattern"
+              className="flex-1 overflow-y-auto px-3 sm:px-[5%] lg:px-[8%] xl:px-[12%] py-3 md:py-4 scrollbar-thin chat-pattern overscroll-contain"
             >
               {msgLoading ? (
                 <MessageListSkeleton />
