@@ -10,6 +10,7 @@ import {
   Settings, 
   RefreshCw, 
   Download,
+  History,
   MoreVertical,
   ArrowLeft,
   X,
@@ -89,13 +90,42 @@ export default function RealChat() {
       const result = await response.json();
 
       if (result.success) {
-        toast.success(result.message || 'Sincronizado!');
+        toast.success(result.message || 'Conversas sincronizadas!');
         refetch();
       } else {
         toast.error(result.error || 'Erro ao sincronizar');
       }
     } catch {
       toast.error('Erro ao sincronizar');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleSyncHistory = async () => {
+    setSyncing(true);
+    try {
+      const response = await fetch(
+        'https://olifecuguxdfzwuzeaox.supabase.co/functions/v1/zapi-sync-history',
+        { 
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit: 100 })
+        }
+      );
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success(result.message || `${result.totalMessages} mensagens sincronizadas!`);
+        refetch();
+        if (selectedConversation) {
+          refetchMessages();
+        }
+      } else {
+        toast.error(result.error || 'Erro ao sincronizar histórico');
+      }
+    } catch {
+      toast.error('Erro ao sincronizar histórico');
     } finally {
       setSyncing(false);
     }
@@ -155,21 +185,34 @@ export default function RealChat() {
             <AvatarFallback className="bg-[#6a7175] text-white text-sm">A</AvatarFallback>
           </Avatar>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button 
               variant="ghost" 
               size="icon" 
               onClick={handleSync} 
               disabled={syncing}
+              title="Sincronizar conversas"
               className="h-10 w-10 rounded-full text-[#aebac1] hover:bg-[#374045] hover:text-[#e9edef]"
             >
               {syncing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+            </Button>
+
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleSyncHistory} 
+              disabled={syncing}
+              title="Sincronizar histórico de mensagens"
+              className="h-10 w-10 rounded-full text-[#aebac1] hover:bg-[#374045] hover:text-[#e9edef]"
+            >
+              <History className="h-5 w-5" />
             </Button>
             
             <Button 
               variant="ghost" 
               size="icon" 
               onClick={refetch} 
+              title="Recarregar lista"
               className="h-10 w-10 rounded-full text-[#aebac1] hover:bg-[#374045] hover:text-[#e9edef]"
             >
               <RefreshCw className="h-5 w-5" />
