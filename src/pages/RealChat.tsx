@@ -285,11 +285,9 @@ export default function RealChat() {
                   <path fill="#fff" fillOpacity=".4" d="M144.8 96.5l-23.1 13.5v-27z"/>
                 </svg>
               </div>
-              <h1 className="text-[32px] font-light text-[#d1d7db] mb-4">WhatsApp Web</h1>
+              <h1 className="text-[32px] font-light text-[#d1d7db] mb-4">Selecione uma conversa</h1>
               <p className="text-sm text-[#8696a0] leading-6">
-                Envie e receba mensagens sem precisar manter seu celular conectado.
-                <br />
-                Use o WhatsApp em até 4 dispositivos vinculados ao mesmo tempo.
+                As mensagens não sumiram — escolha um contato na lista à esquerda para carregar o histórico.
               </p>
             </div>
           </div>
