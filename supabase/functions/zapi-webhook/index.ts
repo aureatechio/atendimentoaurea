@@ -9,6 +9,10 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+// Z-API credentials (used to backfill sent messages when only status callbacks arrive)
+const zapiInstanceId = Deno.env.get('ZAPI_INSTANCE_ID')!;
+const zapiToken = Deno.env.get('ZAPI_TOKEN')!;
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -88,6 +92,10 @@ async function handleReceivedMessage(supabase: any, data: any) {
   let mediaUrl = null;
   let mediaMimeType = null;
   let mediaCaption = null;
+
+  if (!content || !String(content).trim()) {
+    content = '[Mensagem]';
+  }
 
   if (image) {
     messageType = 'image';
@@ -195,7 +203,10 @@ async function handleReceivedMessage(supabase: any, data: any) {
 }
 
 async function handleMessageStatus(supabase: any, data: any) {
-  const { messageId, ids, status } = data;
+  const { messageId, ids, status, phone, isGroup, momment } = data;
+
+  // Ignore group status updates (we don't store group chats)
+  if (isGroup) return;
 
   const idsList: string[] = Array.isArray(ids)
     ? ids
@@ -222,14 +233,154 @@ async function handleMessageStatus(supabase: any, data: any) {
     return;
   }
 
-  const { error } = await supabase
+  // First: update any messages we already have
+  const { error: updateError } = await supabase
     .from('messages')
     .update({ status: mappedStatus })
     .in('message_id', idsList);
 
-  if (error) {
-    console.error('❌ Error updating message status:', error);
-  } else {
-    console.log(`✅ Updated ${idsList.length} messages to: ${mappedStatus}`);
+  if (updateError) {
+    console.error('❌ Error updating message status:', updateError);
   }
+
+  // If the message doesn't exist yet (common for messages sent via WhatsApp app),
+  // backfill by fetching recent chat messages and inserting the missing ones.
+  if (!phone || mappedStatus !== 'sent') {
+    return;
+  }
+
+  const { data: existing } = await supabase
+    .from('messages')
+    .select('message_id')
+    .in('message_id', idsList);
+
+  const existingIds = new Set((existing || []).map((m: any) => m.message_id));
+  const missingIds = idsList.filter((id) => !existingIds.has(id));
+
+  if (missingIds.length === 0) return;
+
+  try {
+    const resp = await fetch(
+      `https://api.z-api.io/instances/${zapiInstanceId}/token/${zapiToken}/chat-messages/${phone}?amount=25`,
+      { method: 'GET' }
+    );
+
+    if (!resp.ok) {
+      console.error('❌ Backfill fetch failed:', resp.status);
+      return;
+    }
+
+    const recent = await resp.json();
+    if (!Array.isArray(recent)) return;
+
+    // Find or create conversation
+    let { data: conversation } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('phone', phone)
+      .maybeSingle();
+
+    const first = recent[0];
+    if (!conversation) {
+      const { data: newConv, error: convErr } = await supabase
+        .from('conversations')
+        .insert({
+          phone,
+          name: first?.senderName || first?.chatName || phone,
+          last_message: null,
+          last_message_at: new Date().toISOString(),
+          unread_count: 0,
+        })
+        .select()
+        .single();
+      if (convErr) throw convErr;
+      conversation = newConv;
+    }
+
+    const toInsert = recent
+      .filter((m: any) => m?.messageId && missingIds.includes(m.messageId))
+      .map((m: any) => {
+        const ts = m.momment ? new Date(m.momment).toISOString() : (momment ? new Date(momment).toISOString() : new Date().toISOString());
+        const content = extractContentFromHistory(m);
+        return {
+          conversation_id: conversation.id,
+          content,
+          sender_type: m.fromMe ? 'agent' : 'customer',
+          message_id: m.messageId,
+          status: mappedStatus,
+          message_type: extractMessageTypeFromHistory(m),
+          media_url: extractMediaUrlFromHistory(m),
+          media_mime_type: extractMimeTypeFromHistory(m),
+          media_caption: extractCaptionFromHistory(m),
+          created_at: ts,
+        };
+      });
+
+    if (toInsert.length === 0) return;
+
+    const { error: insErr } = await supabase.from('messages').insert(toInsert);
+    if (insErr) throw insErr;
+
+    // Update conversation preview with the newest inserted message
+    const newest = toInsert.reduce((a: any, b: any) =>
+      new Date(a.created_at).getTime() > new Date(b.created_at).getTime() ? a : b
+    );
+
+    await supabase
+      .from('conversations')
+      .update({ last_message: newest.content, last_message_at: newest.created_at })
+      .eq('id', conversation.id);
+
+    console.log(`✅ Backfilled ${toInsert.length} sent messages for ${phone}`);
+  } catch (err) {
+    console.error('❌ Backfill error:', err);
+  }
+}
+
+// Helpers for backfill (same extraction rules as sync-history)
+function extractContentFromHistory(msg: any): string {
+  if (msg.text?.message) return msg.text.message;
+  if (typeof msg.text === 'string') return msg.text;
+  if (msg.image) return msg.image.caption || '[Imagem]';
+  if (msg.video) return msg.video.caption || '[Vídeo]';
+  if (msg.audio) return '[Áudio]';
+  if (msg.document) return `[Documento: ${msg.document.fileName || 'arquivo'}]`;
+  if (msg.sticker) return '[Sticker]';
+  if (msg.location) return '[Localização]';
+  if (msg.contact) return '[Contato]';
+  return msg.body || '[Mensagem]';
+}
+
+function extractMessageTypeFromHistory(msg: any): string {
+  if (msg.image) return 'image';
+  if (msg.video) return 'video';
+  if (msg.audio) return 'audio';
+  if (msg.document) return 'document';
+  if (msg.sticker) return 'sticker';
+  if (msg.location) return 'location';
+  if (msg.contact) return 'contact';
+  return 'text';
+}
+
+function extractMediaUrlFromHistory(msg: any): string | null {
+  if (msg.image) return msg.image.imageUrl || msg.image.thumbnailUrl;
+  if (msg.video) return msg.video.videoUrl;
+  if (msg.audio) return msg.audio.audioUrl;
+  if (msg.document) return msg.document.documentUrl;
+  return null;
+}
+
+function extractMimeTypeFromHistory(msg: any): string | null {
+  if (msg.image) return msg.image.mimeType || 'image/jpeg';
+  if (msg.video) return msg.video.mimeType || 'video/mp4';
+  if (msg.audio) return msg.audio.mimeType || 'audio/ogg';
+  if (msg.document) return msg.document.mimeType || 'application/octet-stream';
+  return null;
+}
+
+function extractCaptionFromHistory(msg: any): string | null {
+  if (msg.image?.caption) return msg.image.caption;
+  if (msg.video?.caption) return msg.video.caption;
+  if (msg.document?.fileName) return msg.document.fileName;
+  return null;
 }
