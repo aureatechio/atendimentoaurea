@@ -5,11 +5,12 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, ArrowLeft, MessageSquare, Settings, RefreshCw } from 'lucide-react';
+import { Loader2, Send, ArrowLeft, MessageSquare, Settings, RefreshCw, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 
 export default function RealChat() {
   const { conversations, loading: convLoading, markAsRead, refetch } = useRealConversations();
@@ -17,6 +18,30 @@ export default function RealChat() {
   const { messages, loading: msgLoading, sendMessage } = useRealMessages(selectedConversation?.id || null);
   const [inputValue, setInputValue] = useState('');
   const [sending, setSending] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const response = await fetch(
+        'https://olifecuguxdfzwuzeaox.supabase.co/functions/v1/zapi-sync',
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success(`Sincronizado! ${result.imported} conversas importadas, ${result.skipped} ignoradas`);
+        refetch();
+      } else {
+        toast.error(result.error || 'Erro ao sincronizar');
+      }
+    } catch (err) {
+      toast.error('Erro ao sincronizar conversas');
+      console.error('Sync error:', err);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleSelectConversation = (conv: RealConversation) => {
     setSelectedConversation(conv);
@@ -49,17 +74,27 @@ export default function RealChat() {
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-lg font-semibold">WhatsApp</h1>
             <div className="flex gap-1">
-              <Button variant="ghost" size="icon" onClick={refetch} className="h-8 w-8">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={handleSync} 
+                disabled={syncing}
+                className="h-8 w-8"
+                title="Sincronizar conversas da Z-API"
+              >
+                {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              </Button>
+              <Button variant="ghost" size="icon" onClick={refetch} className="h-8 w-8" title="Atualizar">
                 <RefreshCw className="h-4 w-4" />
               </Button>
               <Link to="/whatsapp">
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button variant="ghost" size="icon" className="h-8 w-8" title="Configurações">
                   <Settings className="h-4 w-4" />
                 </Button>
               </Link>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">Mensagens reais via Z-API</p>
+          <p className="text-xs text-muted-foreground">Conversas reais do WhatsApp</p>
         </header>
 
         <ScrollArea className="flex-1">
