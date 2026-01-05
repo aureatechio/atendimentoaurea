@@ -3,13 +3,38 @@ import { useZAPIConnection } from '@/hooks/useZAPIConnection';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Smartphone, QrCode, RefreshCw, Unplug, CheckCircle2, XCircle, ArrowLeft } from 'lucide-react';
+import { Loader2, Smartphone, QrCode, RefreshCw, Unplug, CheckCircle2, XCircle, ArrowLeft, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 export default function WhatsAppSettings() {
   const { status, loading, qrLoading, checkStatus, getQRCode, disconnect, restart } = useZAPIConnection();
   const [pollingQR, setPollingQR] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSyncHistory = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('zapi-sync-history', {
+        body: { limit: 50 }
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success(`Sincronização concluída! ${data.synced} conversas sincronizadas.`);
+      } else {
+        toast.error(data.error || 'Erro ao sincronizar');
+      }
+    } catch (err) {
+      console.error('Sync error:', err);
+      toast.error('Erro ao sincronizar histórico');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // Poll for QR code when not connected
   useEffect(() => {
@@ -188,6 +213,33 @@ export default function WhatsAppSettings() {
                   Ir para o Painel de Atendimento
                 </Button>
               </Link>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Sync History Card */}
+        {status.connected && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5" />
+                Sincronizar Histórico
+              </CardTitle>
+              <CardDescription>
+                Importe mensagens antigas do WhatsApp para o sistema
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Esta função busca as últimas 50 mensagens de cada conversa e as importa para o sistema.
+              </p>
+              <Button onClick={handleSyncHistory} disabled={syncing}>
+                {syncing ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sincronizando...</>
+                ) : (
+                  <><History className="h-4 w-4 mr-2" /> Sincronizar Agora</>
+                )}
+              </Button>
             </CardContent>
           </Card>
         )}
