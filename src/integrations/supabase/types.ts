@@ -56,7 +56,11 @@ export type Database = {
           conversation_id: string
           created_at: string
           id: string
+          media_caption: string | null
+          media_mime_type: string | null
+          media_url: string | null
           message_id: string | null
+          message_type: string | null
           sender_type: string
           status: string | null
         }
@@ -65,7 +69,11 @@ export type Database = {
           conversation_id: string
           created_at?: string
           id?: string
+          media_caption?: string | null
+          media_mime_type?: string | null
+          media_url?: string | null
           message_id?: string | null
+          message_type?: string | null
           sender_type: string
           status?: string | null
         }
@@ -74,7 +82,11 @@ export type Database = {
           conversation_id?: string
           created_at?: string
           id?: string
+          media_caption?: string | null
+          media_mime_type?: string | null
+          media_url?: string | null
           message_id?: string | null
+          message_type?: string | null
           sender_type?: string
           status?: string | null
         }

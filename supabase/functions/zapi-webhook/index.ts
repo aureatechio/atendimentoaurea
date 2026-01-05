@@ -10,18 +10,15 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    
     const body = await req.json();
     console.log('📨 Webhook received:', JSON.stringify(body, null, 2));
 
-    // Z-API webhook types
     const { type } = body;
 
     switch (type) {
@@ -56,23 +53,53 @@ serve(async (req) => {
 });
 
 async function handleReceivedMessage(supabase: any, data: any) {
-  const { phone, text, senderName, messageId, momment, isGroup } = data;
+  const { phone, text, senderName, messageId, momment, isGroup, image, audio, video, document } = data;
   
-  // Ignore group messages for now
   if (isGroup) {
     console.log('👥 Ignoring group message');
     return;
   }
   
-  // Clean phone number
   const cleanPhone = phone?.replace('@c.us', '').replace('@g.us', '');
   
-  if (!cleanPhone || !text) {
-    console.log('⚠️ Missing phone or text in message');
+  if (!cleanPhone) {
+    console.log('⚠️ Missing phone in message');
     return;
   }
-  
-  console.log(`📩 New message from ${senderName} (${cleanPhone}): ${text}`);
+
+  // Determine message type and content
+  let messageType = 'text';
+  let content = text || '';
+  let mediaUrl = null;
+  let mediaMimeType = null;
+  let mediaCaption = null;
+
+  if (image) {
+    messageType = 'image';
+    mediaUrl = image.imageUrl || image.thumbnailUrl;
+    mediaMimeType = image.mimeType || 'image/jpeg';
+    mediaCaption = image.caption || '';
+    content = mediaCaption || '[Imagem]';
+  } else if (audio) {
+    messageType = 'audio';
+    mediaUrl = audio.audioUrl;
+    mediaMimeType = audio.mimeType || 'audio/ogg';
+    content = '[Áudio]';
+  } else if (video) {
+    messageType = 'video';
+    mediaUrl = video.videoUrl;
+    mediaMimeType = video.mimeType || 'video/mp4';
+    mediaCaption = video.caption || '';
+    content = mediaCaption || '[Vídeo]';
+  } else if (document) {
+    messageType = 'document';
+    mediaUrl = document.documentUrl;
+    mediaMimeType = document.mimeType || 'application/pdf';
+    mediaCaption = document.fileName || 'document';
+    content = `[Documento: ${mediaCaption}]`;
+  }
+
+  console.log(`📩 New ${messageType} from ${senderName} (${cleanPhone})`);
   
   try {
     // Find or create conversation
@@ -82,30 +109,22 @@ async function handleReceivedMessage(supabase: any, data: any) {
       .eq('phone', cleanPhone)
       .maybeSingle();
     
-    if (convError) {
-      console.error('❌ Error finding conversation:', convError);
-      throw convError;
-    }
+    if (convError) throw convError;
     
     if (!conversation) {
-      // Create new conversation
       const { data: newConv, error: createError } = await supabase
         .from('conversations')
         .insert({
           phone: cleanPhone,
           name: senderName || cleanPhone,
-          last_message: text,
+          last_message: content,
           last_message_at: momment || new Date().toISOString(),
           unread_count: 1,
         })
         .select()
         .single();
       
-      if (createError) {
-        console.error('❌ Error creating conversation:', createError);
-        throw createError;
-      }
-      
+      if (createError) throw createError;
       conversation = newConv;
       console.log('✅ Created new conversation:', conversation.id);
     }
@@ -115,19 +134,19 @@ async function handleReceivedMessage(supabase: any, data: any) {
       .from('messages')
       .insert({
         conversation_id: conversation.id,
-        content: text,
+        content,
         sender_type: 'customer',
         message_id: messageId,
         status: 'delivered',
+        message_type: messageType,
+        media_url: mediaUrl,
+        media_mime_type: mediaMimeType,
+        media_caption: mediaCaption,
       })
       .select()
       .single();
     
-    if (msgError) {
-      console.error('❌ Error saving message:', msgError);
-      throw msgError;
-    }
-    
+    if (msgError) throw msgError;
     console.log('✅ Message saved:', message.id);
     
   } catch (err) {
@@ -139,15 +158,27 @@ async function handleMessageStatus(supabase: any, data: any) {
   const { messageId, status } = data;
   console.log(`📊 Message ${messageId} status: ${status}`);
   
-  // Update message status in database
+  // Map Z-API status to our format
+  const statusMap: Record<string, string> = {
+    'PENDING': 'sending',
+    'SENT': 'sent',
+    'RECEIVED': 'delivered',
+    'READ': 'read',
+    'PLAYED': 'read',
+  };
+  
+  const mappedStatus = statusMap[status] || status.toLowerCase();
+  
   if (messageId) {
     const { error } = await supabase
       .from('messages')
-      .update({ status: status.toLowerCase() })
+      .update({ status: mappedStatus })
       .eq('message_id', messageId);
     
     if (error) {
       console.error('❌ Error updating message status:', error);
+    } else {
+      console.log(`✅ Updated status to: ${mappedStatus}`);
     }
   }
 }
