@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Search, Filter, X } from 'lucide-react';
+import { Search, Filter, X, Settings } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,7 @@ import { useChatStore } from '@/stores/chatStore';
 import { ConversationItem } from './ConversationItem';
 import { ConversationFilter } from '@/types/chat';
 import { cn } from '@/lib/utils';
+import { Link } from 'react-router-dom';
 
 const filters: { label: string; value: ConversationFilter }[] = [
   { label: 'Todas', value: 'all' },
@@ -74,17 +75,29 @@ export function ConversationsSidebar() {
       <header className="flex-shrink-0 p-4 border-b border-sidebar-border">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-lg font-semibold text-foreground">Conversas</h1>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              setSearchOpen(true);
-              setTimeout(() => searchInputRef.current?.focus(), 0);
-            }}
-            className="h-8 w-8"
-          >
-            <Search className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Link to="/whatsapp">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                title="Configurações do WhatsApp"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            </Link>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setSearchOpen(true);
+                setTimeout(() => searchInputRef.current?.focus(), 0);
+              }}
+              className="h-8 w-8"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {/* Search */}
