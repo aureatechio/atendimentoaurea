@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRealConversations, useRealMessages, RealConversation, RealMessage } from '@/hooks/useRealConversations';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,7 @@ import {
   MoreVertical,
   ArrowLeft,
   X,
+  Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
@@ -35,6 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function RealChat() {
+  const { hasRole, profile } = useAuth();
   const { conversations, loading: convLoading, markAsRead, refetch, fetchProfilePicture } = useRealConversations();
   const [selectedConversation, setSelectedConversation] = useState<RealConversation | null>(null);
   const {
@@ -202,12 +205,29 @@ export default function RealChat() {
       )}>
         {/* Header */}
         <header className="h-[59px] px-3 md:px-4 flex items-center justify-between bg-[#202c33] flex-shrink-0">
-          <Avatar className="h-10 w-10 cursor-pointer hover:opacity-80 transition-opacity">
-            <AvatarFallback className="bg-[#6a7175] text-white text-sm font-medium">A</AvatarFallback>
-          </Avatar>
+          <div className="flex items-center gap-2">
+            <Avatar className="h-10 w-10 cursor-pointer hover:opacity-80 transition-opacity">
+              <AvatarFallback className="bg-[#6a7175] text-white text-sm font-medium">
+                {profile?.name?.charAt(0).toUpperCase() || 'A'}
+              </AvatarFallback>
+            </Avatar>
+            
+            {hasRole('admin') && (
+              <Link to="/admin">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  title="Painel Administrativo"
+                  className="h-9 w-9 md:h-10 md:w-10 rounded-full text-[#00a884] hover:bg-[#374045] hover:text-[#00a884] transition-colors"
+                >
+                  <Shield className="h-[22px] w-[22px]" />
+                </Button>
+              </Link>
+            )}
+          </div>
           
           <div className="flex items-center gap-0.5 md:gap-1">
-            <Button 
+            <Button
               variant="ghost" 
               size="icon" 
               onClick={handleSync} 
