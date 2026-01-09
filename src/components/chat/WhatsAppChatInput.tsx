@@ -73,11 +73,6 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 16 * 1024 * 1024) {
-      toast.error('Arquivo muito grande. Máximo 16MB');
-      return;
-    }
-
     setAttachOpen(false);
     setUploading(true);
 
