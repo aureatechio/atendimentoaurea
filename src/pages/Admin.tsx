@@ -25,7 +25,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import UserManagementModal from '@/components/admin/UserManagementModal';
-import ConversationReassignModal from '@/components/admin/ConversationReassignModal';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -66,6 +65,11 @@ interface DashboardStats {
   totalAgents: number;
   pendingApprovals: number;
   conversationsTrend: number;
+  messagesTrend: number;
+  totalUnreadMessages: number;
+  avgMessagesPerConversation: number;
+  resolvedTodayConversations: number;
+  avgConversationsPerAgent: number;
 }
 
 export default function Admin() {
@@ -89,6 +93,11 @@ export default function Admin() {
     totalAgents: 0,
     pendingApprovals: 0,
     conversationsTrend: 0,
+    messagesTrend: 0,
+    totalUnreadMessages: 0,
+    avgMessagesPerConversation: 0,
+    resolvedTodayConversations: 0,
+    avgConversationsPerAgent: 0,
   });
   const [loading, setLoading] = useState(true);
   const [pollingQR, setPollingQR] = useState(false);
@@ -98,25 +107,6 @@ export default function Admin() {
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'delete'>('view');
   const [showUserModal, setShowUserModal] = useState(false);
   const [rejectingUser, setRejectingUser] = useState<string | null>(null);
-  const [conversations, setConversations] = useState<Array<{
-    id: string;
-    name: string | null;
-    phone: string;
-    status: string;
-    assigned_to: string | null;
-    unread_count: number;
-    last_message: string | null;
-  }>>([]);
-  const [selectedConversation, setSelectedConversation] = useState<{
-    id: string;
-    name: string | null;
-    phone: string;
-    status: string;
-    assigned_to: string | null;
-    unread_count: number;
-    last_message: string | null;
-  } | null>(null);
-  const [showReassignModal, setShowReassignModal] = useState(false);
 
   const isAdmin = hasRole('admin');
 
@@ -225,29 +215,22 @@ export default function Admin() {
       });
       setAgents(agentsList);
 
-      // Store conversations for reassignment
-      setConversations(convData?.map(c => ({
-        id: c.id,
-        name: c.name,
-        phone: c.phone,
-        status: c.status || 'pending',
-        assigned_to: c.assigned_to,
-        unread_count: c.unread_count || 0,
-        last_message: c.last_message,
-      })) || []);
-
       // Calculate conversation stats
       const total = convData?.length || 0;
       const todayConvs = convData?.filter(c => isToday(new Date(c.created_at))).length || 0;
       const pending_ = convData?.filter(c => c.status === 'pending').length || 0;
       const inProgress = convData?.filter(c => c.status === 'in_progress').length || 0;
       const resolved = convData?.filter(c => c.status === 'resolved').length || 0;
+      const resolvedToday = convData?.filter(c => c.status === 'resolved' && isToday(new Date(c.updated_at))).length || 0;
 
       // Calculate awaiting response - conversations where last message is from customer (not replied)
       const awaitingResponse = convData?.filter(c => {
         const lastMsg = lastMessageByConv.get(c.id);
         return lastMsg?.sender_type === 'customer' && c.status !== 'resolved';
       }).length || 0;
+
+      // Calculate total unread messages
+      const totalUnread = convData?.reduce((sum, c) => sum + (c.unread_count || 0), 0) || 0;
 
       // Calculate yesterday for trend
       const yesterdayConvs = convData?.filter(c => {
@@ -259,6 +242,19 @@ export default function Admin() {
       const trend = yesterdayConvs > 0 
         ? Math.round(((todayConvs - yesterdayConvs) / yesterdayConvs) * 100) 
         : todayConvs > 0 ? 100 : 0;
+
+      // Calculate yesterday messages for trend
+      const yesterdayStart = startOfDay(subDays(new Date(), 1)).toISOString();
+      const yesterdayEnd = endOfDay(subDays(new Date(), 1)).toISOString();
+      const { data: yesterdayMsgs } = await supabase
+        .from('messages')
+        .select('id')
+        .gte('created_at', yesterdayStart)
+        .lte('created_at', yesterdayEnd);
+
+      const messageTrend = (yesterdayMsgs?.length || 0) > 0
+        ? Math.round((((todayMsgs?.length || 0) - (yesterdayMsgs?.length || 0)) / (yesterdayMsgs?.length || 1)) * 100)
+        : (todayMsgs?.length || 0) > 0 ? 100 : 0;
 
       // Calculate avg response time
       let totalResponseTime = 0;
@@ -274,6 +270,14 @@ export default function Admin() {
       });
       const avgResponseTime = responseCount > 0 ? Math.round(totalResponseTime / responseCount / 1000 / 60) : 0;
 
+      // Calculate avg messages per conversation
+      const avgMsgsPerConv = total > 0 ? Math.round((totalMsgs || 0) / total) : 0;
+
+      // Calculate avg conversations per agent
+      const avgConvsPerAgent = agentsList.length > 0 
+        ? Math.round(total / agentsList.length) 
+        : 0;
+
       setStats({
         totalConversations: total,
         todayConversations: todayConvs,
@@ -288,6 +292,11 @@ export default function Admin() {
         totalAgents: agentsList.length,
         pendingApprovals: pending.length,
         conversationsTrend: trend,
+        messagesTrend: messageTrend,
+        totalUnreadMessages: totalUnread,
+        avgMessagesPerConversation: avgMsgsPerConv,
+        resolvedTodayConversations: resolvedToday,
+        avgConversationsPerAgent: avgConvsPerAgent,
       });
 
     } catch (err) {
@@ -451,7 +460,6 @@ export default function Admin() {
         <div className="flex gap-1 mb-6 bg-[#161b22] p-1 rounded-lg w-fit">
           {[
             { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
-            { id: 'conversations', label: 'Conversas', icon: MessageSquare, badge: conversations.filter(c => c.status !== 'resolved').length },
             { id: 'team', label: 'Equipe', icon: UsersRound },
             { id: 'approvals', label: 'Aprovações', icon: UserPlus, badge: stats.pendingApprovals },
             { id: 'settings', label: 'Configurações', icon: Settings2 },
@@ -565,6 +573,68 @@ export default function Admin() {
                           </p>
                         </div>
                         <Users className="h-8 w-8 text-[#30363d]" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Additional Stats Row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card className="bg-[#161b22] border-[#30363d]">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-[#8b949e] uppercase tracking-wide">Resolvidas Hoje</p>
+                          <p className="text-2xl font-bold text-emerald-400 mt-1">{stats.resolvedTodayConversations}</p>
+                        </div>
+                        <CheckCircle2 className="h-8 w-8 text-emerald-500/30" />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className={cn(
+                    "border-[#30363d]",
+                    stats.totalUnreadMessages > 0 
+                      ? "bg-red-500/10 border-red-500/30" 
+                      : "bg-[#161b22]"
+                  )}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-[#8b949e] uppercase tracking-wide">Msgs Não Lidas</p>
+                          <p className={cn(
+                            "text-2xl font-bold mt-1",
+                            stats.totalUnreadMessages > 0 ? "text-red-400" : "text-[#e6edf3]"
+                          )}>{stats.totalUnreadMessages}</p>
+                        </div>
+                        <MessageSquare className={cn(
+                          "h-8 w-8",
+                          stats.totalUnreadMessages > 0 ? "text-red-500/50" : "text-[#30363d]"
+                        )} />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-[#161b22] border-[#30363d]">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-[#8b949e] uppercase tracking-wide">Msgs/Conversa</p>
+                          <p className="text-2xl font-bold text-[#e6edf3] mt-1">{stats.avgMessagesPerConversation}</p>
+                        </div>
+                        <BarChart3 className="h-8 w-8 text-[#30363d]" />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-[#161b22] border-[#30363d]">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-[#8b949e] uppercase tracking-wide">Convs/Agente</p>
+                          <p className="text-2xl font-bold text-[#e6edf3] mt-1">{stats.avgConversationsPerAgent}</p>
+                        </div>
+                        <UsersRound className="h-8 w-8 text-[#30363d]" />
                       </div>
                     </CardContent>
                   </Card>
@@ -768,101 +838,6 @@ export default function Admin() {
                             </div>
                           </div>
                         ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            {/* Conversations Tab */}
-            {activeTab === 'conversations' && (
-              <div className="space-y-6">
-                <Card className="bg-[#161b22] border-[#30363d]">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-[#e6edf3] flex items-center gap-2">
-                          <MessageSquare className="h-5 w-5" />
-                          Gerenciar Conversas
-                        </CardTitle>
-                        <CardDescription className="text-[#8b949e]">
-                          Reatribua conversas entre os membros da equipe
-                        </CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {conversations.length === 0 ? (
-                      <div className="text-center py-12">
-                        <MessageSquare className="h-12 w-12 text-[#30363d] mx-auto mb-4" />
-                        <p className="text-[#8b949e]">Nenhuma conversa encontrada</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-[#30363d]">
-                        {conversations
-                          .filter(c => c.status !== 'resolved')
-                          .sort((a, b) => (b.unread_count || 0) - (a.unread_count || 0))
-                          .map((conv) => {
-                            const assignedAgent = agents.find(a => a.user_id === conv.assigned_to);
-                            return (
-                              <div key={conv.id} className="flex items-center justify-between py-4 first:pt-0 last:pb-0">
-                                <div className="flex items-center gap-4 min-w-0 flex-1">
-                                  <div className="relative">
-                                    <Avatar className="h-12 w-12">
-                                      <AvatarFallback className="bg-[#30363d] text-[#e6edf3] text-lg">
-                                        {(conv.name || conv.phone).charAt(0).toUpperCase()}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                    {conv.unread_count > 0 && (
-                                      <div className="absolute -top-1 -right-1 h-5 min-w-[20px] px-1 rounded-full bg-[#238636] text-white text-xs flex items-center justify-center">
-                                        {conv.unread_count}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="font-medium text-[#e6edf3] truncate">{conv.name || conv.phone}</p>
-                                    <p className="text-sm text-[#8b949e] truncate">{conv.phone}</p>
-                                    {conv.last_message && (
-                                      <p className="text-xs text-[#8b949e] truncate mt-1">{conv.last_message}</p>
-                                    )}
-                                  </div>
-                                </div>
-                                
-                                <div className="flex items-center gap-4">
-                                  <div className="text-right hidden sm:block">
-                                    <Badge variant="outline" className={cn(
-                                      "text-[10px] border",
-                                      conv.status === 'pending' ? "border-yellow-500/30 text-yellow-400" :
-                                      conv.status === 'in_progress' ? "border-blue-500/30 text-blue-400" :
-                                      "border-emerald-500/30 text-emerald-400"
-                                    )}>
-                                      {conv.status === 'pending' ? 'Aguardando' : 
-                                       conv.status === 'in_progress' ? 'Em Atendimento' : 'Resolvido'}
-                                    </Badge>
-                                    {assignedAgent && (
-                                      <p className="text-xs text-[#8b949e] mt-1">
-                                        Atribuído: {assignedAgent.name}
-                                      </p>
-                                    )}
-                                  </div>
-                                  
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedConversation(conv);
-                                      setShowReassignModal(true);
-                                    }}
-                                    className="border-[#30363d] text-[#e6edf3] hover:bg-[#30363d]"
-                                  >
-                                    <ArrowLeft className="h-4 w-4 mr-1 rotate-180" />
-                                    Reatribuir
-                                  </Button>
-                                </div>
-                              </div>
-                            );
-                          })}
                       </div>
                     )}
                   </CardContent>
@@ -1219,16 +1194,6 @@ export default function Admin() {
         onSuccess={fetchAllData}
       />
 
-      <ConversationReassignModal
-        open={showReassignModal}
-        onClose={() => {
-          setShowReassignModal(false);
-          setSelectedConversation(null);
-        }}
-        conversation={selectedConversation}
-        agents={agents}
-        onSuccess={fetchAllData}
-      />
     </div>
   );
 }
