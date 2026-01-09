@@ -4,17 +4,17 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import logoAurea from '@/assets/logo-aurea.png';
+
+const FIXED_PASSWORD = 'aurea2024!';
 
 export default function Login() {
   const { user, loading, signIn, signUp } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   if (loading) {
@@ -35,11 +35,9 @@ export default function Login() {
 
     try {
       if (isLogin) {
-        const { error } = await signIn(email, password);
+        const { error } = await signIn(email, FIXED_PASSWORD);
         if (error) {
-          toast.error(error.message === 'Invalid login credentials' 
-            ? 'Email ou senha inválidos' 
-            : error.message);
+          toast.error('Email não encontrado ou senha incorreta');
         } else {
           toast.success('Login realizado com sucesso!');
         }
@@ -49,13 +47,12 @@ export default function Login() {
           setSubmitting(false);
           return;
         }
-        const { error } = await signUp(email, password, name);
+        const { error } = await signUp(email, FIXED_PASSWORD, name);
         if (error) {
           toast.error(error.message);
         } else {
           toast.success('Conta criada! Faça login para continuar.');
           setIsLogin(true);
-          setPassword('');
         }
       }
     } finally {
@@ -109,31 +106,6 @@ export default function Login() {
                 required
                 className="bg-[#2a3942] border-none text-[#e9edef] placeholder:text-[#8696a0] h-12 rounded-xl focus-visible:ring-[#00a884]"
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-[#e9edef] text-sm">
-                Senha
-              </Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                  className="bg-[#2a3942] border-none text-[#e9edef] placeholder:text-[#8696a0] h-12 rounded-xl pr-12 focus-visible:ring-[#00a884]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8696a0] hover:text-[#e9edef] transition-colors"
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
             </div>
 
             <Button
