@@ -20,13 +20,11 @@ const isPriorityTag = (tag: Tag) => {
 };
 
 export function ConversationTagsPanel({ conversationId, compact = false }: ConversationTagsPanelProps) {
-  const { conversationTags, addTag, removeTag, loading: tagsLoading } = useConversationTags(conversationId);
+  const { conversationTags, removeTag, replaceTag, loading: tagsLoading } = useConversationTags(conversationId);
   const { tags: allTags, loading: allTagsLoading } = useTags();
   const [priorityOpen, setPriorityOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
 
-  const appliedTagIds = new Set(conversationTags.map(ct => ct.tag_id));
-  
   // Separate tags by type
   const priorityTags = allTags.filter(t => isPriorityTag(t));
   const agentTags = allTags.filter(t => !isPriorityTag(t));
@@ -39,34 +37,26 @@ export function ConversationTagsPanel({ conversationId, compact = false }: Conve
   const currentPriorityTag = appliedPriorityTags[0]?.tag || null;
   const currentAgentTag = appliedAgentTags[0]?.tag || null;
 
-  // Handle priority tag change (remove old, add new)
+  // Handle priority tag change
   const handleChangePriorityTag = async (tagId: string) => {
     // If clicking the same tag, just remove it
     if (currentPriorityTag?.id === tagId) {
       await removeTag(tagId);
     } else {
-      // Remove current priority tag first
-      if (currentPriorityTag) {
-        await removeTag(currentPriorityTag.id);
-      }
-      // Add new priority tag
-      await addTag(tagId);
+      // Use replaceTag for atomic operation
+      await replaceTag(currentPriorityTag?.id || null, tagId);
     }
     setPriorityOpen(false);
   };
 
-  // Handle agent tag change (remove old, add new)
+  // Handle agent tag change
   const handleChangeAgentTag = async (tagId: string) => {
     // If clicking the same tag, just remove it
     if (currentAgentTag?.id === tagId) {
       await removeTag(tagId);
     } else {
-      // Remove current agent tag first
-      if (currentAgentTag) {
-        await removeTag(currentAgentTag.id);
-      }
-      // Add new agent tag
-      await addTag(tagId);
+      // Use replaceTag for atomic operation
+      await replaceTag(currentAgentTag?.id || null, tagId);
     }
     setAgentOpen(false);
   };
