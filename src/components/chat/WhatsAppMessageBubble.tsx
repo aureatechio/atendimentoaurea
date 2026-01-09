@@ -244,14 +244,14 @@ export function WhatsAppMessageBubble({
 
   const BubbleTail = () => (
     <div className={cn(
-      "absolute top-0 w-2 h-3",
-      isFromAgent ? "-right-2" : "-left-2"
+      "absolute top-0 w-2 h-3 overflow-hidden",
+      isFromAgent ? "-right-[7px]" : "-left-[7px]"
     )}>
-      <svg viewBox="0 0 8 13" width="8" height="13">
+      <svg viewBox="0 0 8 13" width="8" height="13" className="block">
         {isFromAgent ? (
-          <path fill="#005c4b" d="M1.533 3.568 8 12.193V1H2.812C1.042 1 .474 2.156 1.533 3.568z" />
+          <path fill="#005c4b" d="M1.533 3.568 8 12.193V0H2.812C1.042 0 .474 1.156 1.533 3.568z" />
         ) : (
-          <path fill="#202c33" d="M6.467 3.568 0 12.193V1h5.188c1.77 0 2.338 1.156 1.279 2.568z" />
+          <path fill="#202c33" d="M6.467 3.568 0 12.193V0h5.188c1.77 0 2.338 1.156 1.279 2.568z" />
         )}
       </svg>
     </div>
@@ -268,10 +268,10 @@ export function WhatsAppMessageBubble({
     >
       <div
         className={cn(
-          'relative max-w-[85%] sm:max-w-[75%] md:max-w-[65%] rounded-lg px-[9px] py-[6px] shadow-sm group',
+          'relative max-w-[85%] sm:max-w-[75%] md:max-w-[65%] rounded-lg px-[9px] py-[6px] shadow-sm group min-w-[80px]',
           isFromAgent
-            ? cn('bg-[#005c4b]', showTail && 'rounded-tr-none')
-            : cn('bg-[#202c33]', showTail && 'rounded-tl-none')
+            ? cn('bg-[#005c4b]', showTail && 'rounded-tr-[0px]')
+            : cn('bg-[#202c33]', showTail && 'rounded-tl-[0px]')
         )}
       >
         {showTail && <BubbleTail />}
@@ -337,11 +337,11 @@ export function WhatsAppMessageBubble({
         {renderMedia()}
         
         {messageType === 'text' && (
-          <div className="flex items-end gap-1.5 flex-wrap">
-            <p className="text-[14px] md:text-[14.2px] text-[#e9edef] whitespace-pre-wrap break-words leading-[19px]">
+          <div className="flex items-end gap-1 min-w-0">
+            <p className="text-[14px] md:text-[14.2px] text-[#e9edef] whitespace-pre-wrap break-words leading-[19px] flex-1 min-w-0">
               {content}
             </p>
-            <span className="text-[10px] md:text-[11px] text-[#ffffff99] whitespace-nowrap ml-auto mb-[1px] flex items-center gap-1 tabular-nums select-none">
+            <span className="text-[10px] md:text-[11px] text-[#ffffff99] whitespace-nowrap flex-shrink-0 mb-[1px] flex items-center gap-1 tabular-nums select-none pl-2">
               {formatTime(createdAt)}
               <MessageStatusIcon status={status} isFromAgent={isFromAgent} />
             </span>
