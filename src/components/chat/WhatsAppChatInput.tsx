@@ -175,7 +175,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
         .from('chat-media')
         .getPublicUrl(fileName);
 
-      await onSendMedia(pendingFile.type, urlData.publicUrl, caption || pendingFile.file.name);
+      await onSendMedia(pendingFile.type, urlData.publicUrl, caption || undefined);
       toast.success('Mídia enviada!');
       cancelPendingFile();
     } catch {
