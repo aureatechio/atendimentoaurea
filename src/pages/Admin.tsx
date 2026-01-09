@@ -7,14 +7,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Progress } from '@/components/ui/progress';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
   Loader2, Users, QrCode, BarChart3, CheckCircle2, XCircle, 
   UserCheck, UserX, Clock, MessageSquare, ArrowLeft, RefreshCw,
-  Smartphone, History
+  Smartphone, History, TrendingUp, TrendingDown, AlertCircle,
+  UserPlus, Settings2, Activity, Zap, Phone, Calendar,
+  LayoutDashboard, UsersRound, Wifi, WifiOff, MoreVertical,
+  ChevronRight, Circle
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { format, subDays, isToday, startOfDay, endOfDay } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface PendingUser {
   id: string;
@@ -24,83 +31,148 @@ interface PendingUser {
   created_at: string;
 }
 
-interface ConversationStats {
-  total: number;
-  pending: number;
-  inProgress: number;
-  resolved: number;
+interface Agent {
+  id: string;
+  user_id: string;
+  name: string;
+  email: string;
+  role: string;
+  is_online: boolean;
+  activeConversations: number;
+  totalConversations: number;
   avgResponseTime: number;
 }
 
-interface AgentStats {
-  id: string;
-  name: string;
-  activeConversations: number;
+interface DashboardStats {
+  totalConversations: number;
+  todayConversations: number;
+  pendingConversations: number;
+  inProgressConversations: number;
+  resolvedConversations: number;
   avgResponseTime: number;
+  totalMessages: number;
+  todayMessages: number;
+  activeAgents: number;
+  totalAgents: number;
+  pendingApprovals: number;
+  conversationsTrend: number;
 }
 
 export default function Admin() {
-  const { hasRole } = useAuth();
+  const { hasRole, profile } = useAuth();
   const { status, loading: zapiLoading, qrLoading, checkStatus, getQRCode, disconnect, restart } = useZAPIConnection();
+  
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
-  const [stats, setStats] = useState<ConversationStats>({ total: 0, pending: 0, inProgress: 0, resolved: 0, avgResponseTime: 0 });
-  const [agentStats, setAgentStats] = useState<AgentStats[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalConversations: 0,
+    todayConversations: 0,
+    pendingConversations: 0,
+    inProgressConversations: 0,
+    resolvedConversations: 0,
+    avgResponseTime: 0,
+    totalMessages: 0,
+    todayMessages: 0,
+    activeAgents: 0,
+    totalAgents: 0,
+    pendingApprovals: 0,
+    conversationsTrend: 0,
+  });
+  const [loading, setLoading] = useState(true);
   const [pollingQR, setPollingQR] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [approvingUser, setApprovingUser] = useState<string | null>(null);
 
   const isAdmin = hasRole('admin');
 
-  // Fetch pending users (profiles without roles)
-  const fetchPendingUsers = async () => {
-    setLoadingUsers(true);
+  const fetchAllData = async () => {
+    setLoading(true);
     try {
+      // Fetch conversations
+      const { data: conversations, error: convError } = await supabase
+        .from('conversations')
+        .select('id, status, assigned_to, created_at, updated_at');
+
+      if (convError) throw convError;
+
+      // Fetch messages for today
+      const todayStart = startOfDay(new Date()).toISOString();
+      const { data: todayMsgs, error: msgError } = await supabase
+        .from('messages')
+        .select('id, created_at')
+        .gte('created_at', todayStart);
+
+      // Fetch all messages count
+      const { count: totalMsgs } = await supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true });
+
+      // Fetch profiles and roles
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, user_id, name, email, created_at');
+        .select('id, user_id, name, email, is_online, created_at');
 
       if (profilesError) throw profilesError;
 
       const { data: roles, error: rolesError } = await supabase
         .from('user_roles')
-        .select('user_id');
+        .select('user_id, role');
 
       if (rolesError) throw rolesError;
 
+      // Calculate pending users
       const usersWithRoles = new Set(roles?.map(r => r.user_id) || []);
       const pending = profiles?.filter(p => !usersWithRoles.has(p.user_id)) || [];
-      
       setPendingUsers(pending);
-    } catch (err) {
-      console.error('Error fetching pending users:', err);
-      toast.error('Erro ao carregar usuários pendentes');
-    } finally {
-      setLoadingUsers(false);
-    }
-  };
 
-  // Fetch conversation stats
-  const fetchStats = async () => {
-    try {
-      const { data: conversations, error } = await supabase
-        .from('conversations')
-        .select('id, status, assigned_to, created_at, updated_at');
+      // Calculate agents with stats
+      const agentsList: Agent[] = [];
+      const rolesMap = new Map(roles?.map(r => [r.user_id, r.role]) || []);
+      
+      profiles?.forEach(p => {
+        if (usersWithRoles.has(p.user_id)) {
+          const agentConvs = conversations?.filter(c => c.assigned_to === p.user_id) || [];
+          agentsList.push({
+            id: p.id,
+            user_id: p.user_id,
+            name: p.name,
+            email: p.email,
+            role: rolesMap.get(p.user_id) || 'agent',
+            is_online: p.is_online || false,
+            activeConversations: agentConvs.filter(c => c.status === 'in_progress').length,
+            totalConversations: agentConvs.length,
+            avgResponseTime: 0,
+          });
+        }
+      });
+      setAgents(agentsList);
 
-      if (error) throw error;
-
+      // Calculate conversation stats
       const total = conversations?.length || 0;
-      const pending = conversations?.filter(c => c.status === 'pending').length || 0;
+      const todayConvs = conversations?.filter(c => isToday(new Date(c.created_at))).length || 0;
+      const pending_ = conversations?.filter(c => c.status === 'pending').length || 0;
       const inProgress = conversations?.filter(c => c.status === 'in_progress').length || 0;
       const resolved = conversations?.filter(c => c.status === 'resolved').length || 0;
 
-      // Calculate average response time (simplified - time between created_at and updated_at)
+      // Calculate yesterday for trend
+      const yesterdayConvs = conversations?.filter(c => {
+        const date = new Date(c.created_at);
+        const yesterday = subDays(new Date(), 1);
+        return date >= startOfDay(yesterday) && date <= endOfDay(yesterday);
+      }).length || 0;
+
+      const trend = yesterdayConvs > 0 
+        ? Math.round(((todayConvs - yesterdayConvs) / yesterdayConvs) * 100) 
+        : todayConvs > 0 ? 100 : 0;
+
+      // Calculate avg response time
       let totalResponseTime = 0;
       let responseCount = 0;
       conversations?.forEach(c => {
-        if (c.updated_at && c.created_at) {
+        if (c.updated_at && c.created_at && c.status !== 'pending') {
           const diff = new Date(c.updated_at).getTime() - new Date(c.created_at).getTime();
-          if (diff > 0) {
+          if (diff > 0 && diff < 86400000) { // Less than 24h
             totalResponseTime += diff;
             responseCount++;
           }
@@ -108,41 +180,31 @@ export default function Admin() {
       });
       const avgResponseTime = responseCount > 0 ? Math.round(totalResponseTime / responseCount / 1000 / 60) : 0;
 
-      setStats({ total, pending, inProgress, resolved, avgResponseTime });
+      setStats({
+        totalConversations: total,
+        todayConversations: todayConvs,
+        pendingConversations: pending_,
+        inProgressConversations: inProgress,
+        resolvedConversations: resolved,
+        avgResponseTime,
+        totalMessages: totalMsgs || 0,
+        todayMessages: todayMsgs?.length || 0,
+        activeAgents: agentsList.filter(a => a.is_online).length,
+        totalAgents: agentsList.length,
+        pendingApprovals: pending.length,
+        conversationsTrend: trend,
+      });
 
-      // Fetch agent stats
-      const { data: agents, error: agentsError } = await supabase
-        .from('profiles')
-        .select('id, user_id, name');
-
-      if (!agentsError && agents) {
-        const { data: agentRoles } = await supabase
-          .from('user_roles')
-          .select('user_id');
-
-        const agentUserIds = new Set(agentRoles?.map(r => r.user_id) || []);
-        const activeAgents = agents.filter(a => agentUserIds.has(a.user_id));
-
-        const agentStatsData: AgentStats[] = activeAgents.map(agent => {
-          const agentConversations = conversations?.filter(c => c.assigned_to === agent.user_id) || [];
-          return {
-            id: agent.id,
-            name: agent.name,
-            activeConversations: agentConversations.filter(c => c.status === 'in_progress').length,
-            avgResponseTime: 0, // Simplified for now
-          };
-        });
-
-        setAgentStats(agentStatsData);
-      }
     } catch (err) {
-      console.error('Error fetching stats:', err);
+      console.error('Error fetching data:', err);
+      toast.error('Erro ao carregar dados');
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchPendingUsers();
-    fetchStats();
+    fetchAllData();
   }, []);
 
   // Poll for QR code
@@ -173,19 +235,13 @@ export default function Admin() {
       if (error) throw error;
 
       toast.success('Usuário aprovado com sucesso!');
-      fetchPendingUsers();
+      fetchAllData();
     } catch (err) {
       console.error('Error approving user:', err);
       toast.error('Erro ao aprovar usuário');
     } finally {
       setApprovingUser(null);
     }
-  };
-
-  const handleRejectUser = async (userId: string) => {
-    // For now, just remove from pending list (in a real app, you might delete the user)
-    toast.info('Usuário rejeitado');
-    setPendingUsers(prev => prev.filter(u => u.user_id !== userId));
   };
 
   const handleConnect = async () => {
@@ -203,8 +259,8 @@ export default function Admin() {
       if (error) throw error;
 
       if (data.success) {
-        toast.success(`Sincronização concluída! ${data.synced} conversas sincronizadas.`);
-        fetchStats();
+        toast.success(`${data.synced} conversas sincronizadas!`);
+        fetchAllData();
       } else {
         toast.error(data.error || 'Erro ao sincronizar');
       }
@@ -216,14 +272,36 @@ export default function Admin() {
     }
   };
 
+  const getRoleLabel = (role: string) => {
+    const labels: Record<string, string> = {
+      admin: 'Administrador',
+      supervisor: 'Supervisor',
+      agent: 'Atendente',
+    };
+    return labels[role] || role;
+  };
+
+  const getRoleColor = (role: string) => {
+    const colors: Record<string, string> = {
+      admin: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+      supervisor: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+      agent: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    };
+    return colors[role] || 'bg-gray-500/20 text-gray-400';
+  };
+
   if (!isAdmin) {
     return (
-      <div className="min-h-screen bg-[#111b21] flex items-center justify-center">
-        <Card className="bg-[#202c33] border-[#2a3942]">
-          <CardContent className="pt-6">
-            <p className="text-[#e9edef]">Acesso restrito a administradores.</p>
-            <Link to="/" className="block mt-4">
-              <Button variant="outline">Voltar ao Chat</Button>
+      <div className="min-h-screen bg-[#0f1419] flex items-center justify-center p-4">
+        <Card className="bg-[#1c2128] border-[#30363d] max-w-md">
+          <CardContent className="pt-6 text-center">
+            <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-[#e6edf3] mb-2">Acesso Restrito</h2>
+            <p className="text-[#8b949e] mb-6">Esta área é exclusiva para administradores.</p>
+            <Link to="/">
+              <Button className="bg-[#238636] hover:bg-[#2ea043] text-white">
+                Voltar ao Chat
+              </Button>
             </Link>
           </CardContent>
         </Card>
@@ -232,319 +310,635 @@ export default function Admin() {
   }
 
   return (
-    <div className="min-h-screen bg-[#111b21] p-4 md:p-6">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <Link to="/">
-            <Button variant="ghost" size="icon" className="text-[#aebac1] hover:text-[#e9edef] hover:bg-[#202c33]">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-[#e9edef]">Painel Administrativo</h1>
-            <p className="text-[#8696a0]">Gerencie usuários, conexões e monitore atendimentos</p>
+    <div className="min-h-screen bg-[#0f1419]">
+      {/* Top Navigation */}
+      <header className="sticky top-0 z-50 bg-[#161b22] border-b border-[#30363d] px-4 md:px-6">
+        <div className="flex items-center justify-between h-16 max-w-7xl mx-auto">
+          <div className="flex items-center gap-4">
+            <Link to="/">
+              <Button variant="ghost" size="icon" className="text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#30363d]">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-lg font-semibold text-[#e6edf3]">Painel Administrativo</h1>
+              <p className="text-xs text-[#8b949e]">Atendimento Aurea</p>
+            </div>
           </div>
-        </div>
 
-        <Tabs defaultValue="users" className="space-y-6">
-          <TabsList className="bg-[#202c33] border-[#2a3942]">
-            <TabsTrigger value="users" className="data-[state=active]:bg-[#00a884] data-[state=active]:text-[#111b21]">
-              <Users className="h-4 w-4 mr-2" />
-              Usuários
-            </TabsTrigger>
-            <TabsTrigger value="whatsapp" className="data-[state=active]:bg-[#00a884] data-[state=active]:text-[#111b21]">
-              <QrCode className="h-4 w-4 mr-2" />
-              WhatsApp
-            </TabsTrigger>
-            <TabsTrigger value="stats" className="data-[state=active]:bg-[#00a884] data-[state=active]:text-[#111b21]">
-              <BarChart3 className="h-4 w-4 mr-2" />
-              Métricas
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Users Tab */}
-          <TabsContent value="users" className="space-y-4">
-            <Card className="bg-[#202c33] border-[#2a3942]">
-              <CardHeader>
-                <CardTitle className="text-[#e9edef] flex items-center gap-2">
-                  <UserCheck className="h-5 w-5" />
-                  Aprovação de Cadastros
-                </CardTitle>
-                <CardDescription className="text-[#8696a0]">
-                  Aprove novos usuários e defina suas permissões
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loadingUsers ? (
-                  <div className="flex items-center gap-2 text-[#8696a0]">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Carregando usuários...
-                  </div>
-                ) : pendingUsers.length === 0 ? (
-                  <div className="text-center py-8 text-[#8696a0]">
-                    <UserCheck className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>Nenhum cadastro pendente</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {pendingUsers.map((user) => (
-                      <div key={user.id} className="flex items-center justify-between p-4 bg-[#2a3942] rounded-xl">
-                        <div>
-                          <p className="font-medium text-[#e9edef]">{user.name}</p>
-                          <p className="text-sm text-[#8696a0]">{user.email}</p>
-                          <p className="text-xs text-[#8696a0] mt-1">
-                            Cadastrado em {new Date(user.created_at).toLocaleDateString('pt-BR')}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Select 
-                            onValueChange={(value) => handleApproveUser(user.user_id, value as 'admin' | 'supervisor' | 'agent')}
-                            disabled={approvingUser === user.user_id}
-                          >
-                            <SelectTrigger className="w-32 bg-[#00a884] border-none text-[#111b21]">
-                              <SelectValue placeholder="Aprovar" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="agent">Agente</SelectItem>
-                              <SelectItem value="supervisor">Supervisor</SelectItem>
-                              <SelectItem value="admin">Admin</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={() => handleRejectUser(user.user_id)}
-                            className="text-red-400 hover:text-red-300 hover:bg-red-500/20"
-                          >
-                            <UserX className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* WhatsApp Tab */}
-          <TabsContent value="whatsapp" className="space-y-4">
-            {/* Status Card */}
-            <Card className="bg-[#202c33] border-[#2a3942]">
-              <CardHeader>
-                <CardTitle className="text-[#e9edef] flex items-center gap-2">
-                  <Smartphone className="h-5 w-5" />
-                  Status da Conexão
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {zapiLoading ? (
-                  <div className="flex items-center gap-2 text-[#8696a0]">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Verificando conexão...
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[#e9edef]">Status</span>
-                      <Badge className={cn(
-                        status.connected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                      )}>
-                        {status.connected ? (
-                          <><CheckCircle2 className="h-3 w-3 mr-1" /> Conectado</>
-                        ) : (
-                          <><XCircle className="h-3 w-3 mr-1" /> Desconectado</>
-                        )}
-                      </Badge>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button onClick={checkStatus} variant="outline" size="sm" className="border-[#2a3942] text-[#e9edef]">
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Atualizar
-                      </Button>
-                      {status.connected && (
-                        <>
-                          <Button onClick={disconnect} variant="outline" size="sm" className="border-[#2a3942] text-[#e9edef]">
-                            Desconectar
-                          </Button>
-                          <Button onClick={handleSyncHistory} disabled={syncing} variant="outline" size="sm" className="border-[#2a3942] text-[#e9edef]">
-                            {syncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <History className="h-4 w-4 mr-2" />}
-                            Sincronizar
-                          </Button>
-                        </>
-                      )}
-                      <Button onClick={restart} variant="outline" size="sm" className="border-[#2a3942] text-[#e9edef]">
-                        Reiniciar
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* QR Code Card */}
-            {!status.connected && (
-              <Card className="bg-[#202c33] border-[#2a3942]">
-                <CardHeader>
-                  <CardTitle className="text-[#e9edef] flex items-center gap-2">
-                    <QrCode className="h-5 w-5" />
-                    Conectar WhatsApp
-                  </CardTitle>
-                  <CardDescription className="text-[#8696a0]">
-                    Escaneie o QR Code com seu WhatsApp
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-col items-center gap-4">
-                    {status.qrcode ? (
-                      <>
-                        <div className="bg-white p-4 rounded-lg">
-                          <img 
-                            src={`data:image/png;base64,${status.qrcode}`}
-                            alt="QR Code"
-                            className="w-64 h-64"
-                          />
-                        </div>
-                        <p className="text-sm text-[#8696a0] text-center">
-                          Abra o WhatsApp → Configurações → Aparelhos Conectados
-                        </p>
-                        {pollingQR && (
-                          <div className="flex items-center gap-2 text-sm text-[#8696a0]">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Aguardando conexão...
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <Button onClick={handleConnect} disabled={qrLoading} className="bg-[#00a884] hover:bg-[#00997a] text-[#111b21]">
-                        {qrLoading ? (
-                          <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Gerando...</>
-                        ) : (
-                          <><QrCode className="h-4 w-4 mr-2" /> Gerar QR Code</>
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Connected Card */}
-            {status.connected && (
-              <Card className="bg-green-500/10 border-green-500/30">
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 rounded-full bg-green-500/20 flex items-center justify-center">
-                      <CheckCircle2 className="h-6 w-6 text-green-500" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-[#e9edef]">WhatsApp Conectado!</h3>
-                      <p className="text-sm text-[#8696a0]">
-                        Pronto para receber e enviar mensagens.
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
-          {/* Stats Tab */}
-          <TabsContent value="stats" className="space-y-4">
-            {/* Overview Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card className="bg-[#202c33] border-[#2a3942]">
-                <CardContent className="pt-6">
-                  <div className="text-center">
-                    <p className="text-3xl font-bold text-[#e9edef]">{stats.total}</p>
-                    <p className="text-sm text-[#8696a0]">Total de Conversas</p>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-[#202c33] border-[#2a3942]">
-                <CardContent className="pt-6">
-                  <div className="text-center">
-                    <p className="text-3xl font-bold text-yellow-400">{stats.pending}</p>
-                    <p className="text-sm text-[#8696a0]">Aguardando</p>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-[#202c33] border-[#2a3942]">
-                <CardContent className="pt-6">
-                  <div className="text-center">
-                    <p className="text-3xl font-bold text-blue-400">{stats.inProgress}</p>
-                    <p className="text-sm text-[#8696a0]">Em Atendimento</p>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-[#202c33] border-[#2a3942]">
-                <CardContent className="pt-6">
-                  <div className="text-center">
-                    <p className="text-3xl font-bold text-green-400">{stats.resolved}</p>
-                    <p className="text-sm text-[#8696a0]">Resolvidos</p>
-                  </div>
-                </CardContent>
-              </Card>
+          <div className="flex items-center gap-3">
+            {/* Connection Status */}
+            <div className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium",
+              status.connected 
+                ? "bg-emerald-500/20 text-emerald-400" 
+                : "bg-red-500/20 text-red-400"
+            )}>
+              {status.connected ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
+              {status.connected ? 'WhatsApp Conectado' : 'Desconectado'}
             </div>
 
-            {/* Response Time */}
-            <Card className="bg-[#202c33] border-[#2a3942]">
-              <CardHeader>
-                <CardTitle className="text-[#e9edef] flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
-                  Tempo Médio de Resposta
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-4xl font-bold text-[#00a884]">
-                  {stats.avgResponseTime} <span className="text-lg font-normal text-[#8696a0]">minutos</span>
-                </p>
-              </CardContent>
-            </Card>
+            <Button onClick={fetchAllData} variant="ghost" size="icon" className="text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#30363d]">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
 
-            {/* Agents */}
-            <Card className="bg-[#202c33] border-[#2a3942]">
-              <CardHeader>
-                <CardTitle className="text-[#e9edef] flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  Atendentes Ativos
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {agentStats.length === 0 ? (
-                  <p className="text-[#8696a0]">Nenhum atendente com conversas ativas</p>
-                ) : (
-                  <div className="space-y-3">
-                    {agentStats.map((agent) => (
-                      <div key={agent.id} className="flex items-center justify-between p-3 bg-[#2a3942] rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-[#00a884]/20 flex items-center justify-center">
-                            <span className="text-[#00a884] font-medium">
-                              {agent.name.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                          <span className="text-[#e9edef]">{agent.name}</span>
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-[#238636] text-white text-sm">
+                {profile?.name?.charAt(0).toUpperCase() || 'A'}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto p-4 md:p-6">
+        {/* Tab Navigation */}
+        <div className="flex gap-1 mb-6 bg-[#161b22] p-1 rounded-lg w-fit">
+          {[
+            { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
+            { id: 'team', label: 'Equipe', icon: UsersRound },
+            { id: 'approvals', label: 'Aprovações', icon: UserPlus, badge: stats.pendingApprovals },
+            { id: 'settings', label: 'Configurações', icon: Settings2 },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
+                activeTab === tab.id
+                  ? "bg-[#30363d] text-[#e6edf3]"
+                  : "text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"
+              )}
+            >
+              <tab.icon className="h-4 w-4" />
+              <span className="hidden sm:inline">{tab.label}</span>
+              {tab.badge !== undefined && tab.badge > 0 && (
+                <Badge className="h-5 min-w-[20px] px-1.5 bg-[#f85149] text-white text-xs">
+                  {tab.badge}
+                </Badge>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-[#8b949e]" />
+          </div>
+        ) : (
+          <>
+            {/* Dashboard Tab */}
+            {activeTab === 'dashboard' && (
+              <div className="space-y-6">
+                {/* Quick Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card className="bg-[#161b22] border-[#30363d]">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-[#8b949e] uppercase tracking-wide">Conversas Hoje</p>
+                          <p className="text-2xl font-bold text-[#e6edf3] mt-1">{stats.todayConversations}</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <MessageSquare className="h-4 w-4 text-[#8696a0]" />
-                          <span className="text-[#e9edef] font-medium">{agent.activeConversations}</span>
-                          <span className="text-[#8696a0] text-sm">em atendimento</span>
+                        <div className={cn(
+                          "flex items-center gap-1 text-xs font-medium px-2 py-1 rounded",
+                          stats.conversationsTrend >= 0 
+                            ? "bg-emerald-500/20 text-emerald-400" 
+                            : "bg-red-500/20 text-red-400"
+                        )}>
+                          {stats.conversationsTrend >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                          {Math.abs(stats.conversationsTrend)}%
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                    </CardContent>
+                  </Card>
 
-            <Button onClick={fetchStats} variant="outline" className="border-[#2a3942] text-[#e9edef]">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Atualizar Métricas
-            </Button>
-          </TabsContent>
-        </Tabs>
+                  <Card className="bg-[#161b22] border-[#30363d]">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-[#8b949e] uppercase tracking-wide">Mensagens Hoje</p>
+                          <p className="text-2xl font-bold text-[#e6edf3] mt-1">{stats.todayMessages}</p>
+                        </div>
+                        <MessageSquare className="h-8 w-8 text-[#30363d]" />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-[#161b22] border-[#30363d]">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-[#8b949e] uppercase tracking-wide">Tempo Médio</p>
+                          <p className="text-2xl font-bold text-[#e6edf3] mt-1">{stats.avgResponseTime}<span className="text-sm font-normal text-[#8b949e]">min</span></p>
+                        </div>
+                        <Clock className="h-8 w-8 text-[#30363d]" />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-[#161b22] border-[#30363d]">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-[#8b949e] uppercase tracking-wide">Atendentes Online</p>
+                          <p className="text-2xl font-bold text-[#e6edf3] mt-1">
+                            {stats.activeAgents}<span className="text-sm font-normal text-[#8b949e]">/{stats.totalAgents}</span>
+                          </p>
+                        </div>
+                        <Users className="h-8 w-8 text-[#30363d]" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Status Overview */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Conversation Status */}
+                  <Card className="bg-[#161b22] border-[#30363d]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-[#e6edf3] text-base font-medium flex items-center gap-2">
+                        <Activity className="h-4 w-4 text-[#8b949e]" />
+                        Status das Conversas
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-3 w-3 rounded-full bg-yellow-500" />
+                          <span className="text-sm text-[#e6edf3]">Aguardando</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-medium text-[#e6edf3]">{stats.pendingConversations}</span>
+                          <div className="w-24 h-2 bg-[#30363d] rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-yellow-500 rounded-full" 
+                              style={{ width: `${stats.totalConversations > 0 ? (stats.pendingConversations / stats.totalConversations) * 100 : 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-3 w-3 rounded-full bg-blue-500" />
+                          <span className="text-sm text-[#e6edf3]">Em Atendimento</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-medium text-[#e6edf3]">{stats.inProgressConversations}</span>
+                          <div className="w-24 h-2 bg-[#30363d] rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-blue-500 rounded-full" 
+                              style={{ width: `${stats.totalConversations > 0 ? (stats.inProgressConversations / stats.totalConversations) * 100 : 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-3 w-3 rounded-full bg-emerald-500" />
+                          <span className="text-sm text-[#e6edf3]">Resolvidos</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-medium text-[#e6edf3]">{stats.resolvedConversations}</span>
+                          <div className="w-24 h-2 bg-[#30363d] rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-emerald-500 rounded-full" 
+                              style={{ width: `${stats.totalConversations > 0 ? (stats.resolvedConversations / stats.totalConversations) * 100 : 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t border-[#30363d]">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-[#8b949e]">Total de Conversas</span>
+                          <span className="font-semibold text-[#e6edf3]">{stats.totalConversations}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Quick Actions */}
+                  <Card className="bg-[#161b22] border-[#30363d]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-[#e6edf3] text-base font-medium flex items-center gap-2">
+                        <Zap className="h-4 w-4 text-[#8b949e]" />
+                        Ações Rápidas
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <button 
+                        onClick={() => setActiveTab('approvals')}
+                        className="w-full flex items-center justify-between p-3 bg-[#21262d] hover:bg-[#30363d] rounded-lg transition-colors group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                            <UserPlus className="h-5 w-5 text-purple-400" />
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-medium text-[#e6edf3]">Aprovações Pendentes</p>
+                            <p className="text-xs text-[#8b949e]">{stats.pendingApprovals} usuários aguardando</p>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-[#8b949e] group-hover:text-[#e6edf3]" />
+                      </button>
+
+                      <button 
+                        onClick={() => setActiveTab('settings')}
+                        className="w-full flex items-center justify-between p-3 bg-[#21262d] hover:bg-[#30363d] rounded-lg transition-colors group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "h-10 w-10 rounded-lg flex items-center justify-center",
+                            status.connected ? "bg-emerald-500/20" : "bg-red-500/20"
+                          )}>
+                            <Phone className={cn("h-5 w-5", status.connected ? "text-emerald-400" : "text-red-400")} />
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-medium text-[#e6edf3]">Conexão WhatsApp</p>
+                            <p className="text-xs text-[#8b949e]">{status.connected ? 'Conectado e funcionando' : 'Desconectado - clique para conectar'}</p>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-[#8b949e] group-hover:text-[#e6edf3]" />
+                      </button>
+
+                      <button 
+                        onClick={handleSyncHistory}
+                        disabled={syncing}
+                        className="w-full flex items-center justify-between p-3 bg-[#21262d] hover:bg-[#30363d] rounded-lg transition-colors group disabled:opacity-50"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                            {syncing ? <Loader2 className="h-5 w-5 text-blue-400 animate-spin" /> : <History className="h-5 w-5 text-blue-400" />}
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-medium text-[#e6edf3]">Sincronizar Histórico</p>
+                            <p className="text-xs text-[#8b949e]">Importar mensagens do WhatsApp</p>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-[#8b949e] group-hover:text-[#e6edf3]" />
+                      </button>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Team Overview */}
+                <Card className="bg-[#161b22] border-[#30363d]">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-[#e6edf3] text-base font-medium flex items-center gap-2">
+                        <UsersRound className="h-4 w-4 text-[#8b949e]" />
+                        Equipe de Atendimento
+                      </CardTitle>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setActiveTab('team')}
+                        className="text-[#58a6ff] hover:text-[#58a6ff] hover:bg-[#21262d]"
+                      >
+                        Ver todos
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {agents.length === 0 ? (
+                      <p className="text-[#8b949e] text-sm text-center py-8">Nenhum atendente cadastrado</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {agents.slice(0, 5).map((agent) => (
+                          <div key={agent.id} className="flex items-center justify-between p-3 bg-[#21262d] rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <div className="relative">
+                                <Avatar className="h-10 w-10">
+                                  <AvatarFallback className="bg-[#30363d] text-[#e6edf3]">
+                                    {agent.name.charAt(0).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className={cn(
+                                  "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#21262d]",
+                                  agent.is_online ? "bg-emerald-500" : "bg-[#8b949e]"
+                                )} />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-[#e6edf3]">{agent.name}</p>
+                                <Badge variant="outline" className={cn("text-[10px] border", getRoleColor(agent.role))}>
+                                  {getRoleLabel(agent.role)}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-lg font-semibold text-[#e6edf3]">{agent.activeConversations}</p>
+                              <p className="text-xs text-[#8b949e]">em atendimento</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Team Tab */}
+            {activeTab === 'team' && (
+              <div className="space-y-6">
+                <Card className="bg-[#161b22] border-[#30363d]">
+                  <CardHeader>
+                    <CardTitle className="text-[#e6edf3] flex items-center gap-2">
+                      <UsersRound className="h-5 w-5" />
+                      Gerenciar Equipe
+                    </CardTitle>
+                    <CardDescription className="text-[#8b949e]">
+                      Visualize e gerencie todos os membros da sua equipe de atendimento
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {agents.length === 0 ? (
+                      <div className="text-center py-12">
+                        <Users className="h-12 w-12 text-[#30363d] mx-auto mb-4" />
+                        <p className="text-[#8b949e]">Nenhum membro na equipe</p>
+                        <p className="text-sm text-[#8b949e] mt-1">Aprove usuários pendentes para adicionar à equipe</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-[#30363d]">
+                        {agents.map((agent) => (
+                          <div key={agent.id} className="flex items-center justify-between py-4 first:pt-0 last:pb-0">
+                            <div className="flex items-center gap-4">
+                              <div className="relative">
+                                <Avatar className="h-12 w-12">
+                                  <AvatarFallback className="bg-[#30363d] text-[#e6edf3] text-lg">
+                                    {agent.name.charAt(0).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className={cn(
+                                  "absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-[#161b22]",
+                                  agent.is_online ? "bg-emerald-500" : "bg-[#8b949e]"
+                                )} />
+                              </div>
+                              <div>
+                                <p className="font-medium text-[#e6edf3]">{agent.name}</p>
+                                <p className="text-sm text-[#8b949e]">{agent.email}</p>
+                                <Badge variant="outline" className={cn("mt-1 text-[10px] border", getRoleColor(agent.role))}>
+                                  {getRoleLabel(agent.role)}
+                                </Badge>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-6">
+                              <div className="text-center">
+                                <p className="text-xl font-bold text-[#e6edf3]">{agent.activeConversations}</p>
+                                <p className="text-xs text-[#8b949e]">Ativas</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-xl font-bold text-[#e6edf3]">{agent.totalConversations}</p>
+                                <p className="text-xs text-[#8b949e]">Total</p>
+                              </div>
+                              <div className={cn(
+                                "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium",
+                                agent.is_online ? "bg-emerald-500/20 text-emerald-400" : "bg-[#30363d] text-[#8b949e]"
+                              )}>
+                                <Circle className={cn("h-2 w-2 fill-current", agent.is_online && "animate-pulse")} />
+                                {agent.is_online ? 'Online' : 'Offline'}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Approvals Tab */}
+            {activeTab === 'approvals' && (
+              <div className="space-y-6">
+                <Card className="bg-[#161b22] border-[#30363d]">
+                  <CardHeader>
+                    <CardTitle className="text-[#e6edf3] flex items-center gap-2">
+                      <UserCheck className="h-5 w-5" />
+                      Aprovação de Cadastros
+                    </CardTitle>
+                    <CardDescription className="text-[#8b949e]">
+                      Revise e aprove novos usuários que desejam acessar o sistema
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {pendingUsers.length === 0 ? (
+                      <div className="text-center py-12">
+                        <CheckCircle2 className="h-12 w-12 text-emerald-500/50 mx-auto mb-4" />
+                        <p className="text-[#e6edf3] font-medium">Tudo em dia!</p>
+                        <p className="text-sm text-[#8b949e] mt-1">Não há cadastros pendentes para aprovação</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {pendingUsers.map((user) => (
+                          <div key={user.id} className="flex items-center justify-between p-4 bg-[#21262d] rounded-xl">
+                            <div className="flex items-center gap-4">
+                              <Avatar className="h-12 w-12">
+                                <AvatarFallback className="bg-purple-500/20 text-purple-400 text-lg">
+                                  {user.name.charAt(0).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="font-medium text-[#e6edf3]">{user.name}</p>
+                                <p className="text-sm text-[#8b949e]">{user.email}</p>
+                                <p className="text-xs text-[#8b949e] mt-1 flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  Cadastrado em {format(new Date(user.created_at), "d 'de' MMMM", { locale: ptBR })}
+                                </p>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                              <Select 
+                                onValueChange={(value) => handleApproveUser(user.user_id, value as 'admin' | 'supervisor' | 'agent')}
+                                disabled={approvingUser === user.user_id}
+                              >
+                                <SelectTrigger className="w-36 bg-[#238636] hover:bg-[#2ea043] border-none text-white">
+                                  {approvingUser === user.user_id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <SelectValue placeholder="Aprovar como..." />
+                                  )}
+                                </SelectTrigger>
+                                <SelectContent className="bg-[#21262d] border-[#30363d]">
+                                  <SelectItem value="agent" className="text-[#e6edf3] focus:bg-[#30363d] focus:text-[#e6edf3]">Atendente</SelectItem>
+                                  <SelectItem value="supervisor" className="text-[#e6edf3] focus:bg-[#30363d] focus:text-[#e6edf3]">Supervisor</SelectItem>
+                                  <SelectItem value="admin" className="text-[#e6edf3] focus:bg-[#30363d] focus:text-[#e6edf3]">Administrador</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                className="text-[#f85149] hover:text-[#f85149] hover:bg-[#f85149]/20"
+                              >
+                                <UserX className="h-5 w-5" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Settings Tab */}
+            {activeTab === 'settings' && (
+              <div className="space-y-6">
+                {/* WhatsApp Connection */}
+                <Card className="bg-[#161b22] border-[#30363d]">
+                  <CardHeader>
+                    <CardTitle className="text-[#e6edf3] flex items-center gap-2">
+                      <Smartphone className="h-5 w-5" />
+                      Conexão WhatsApp
+                    </CardTitle>
+                    <CardDescription className="text-[#8b949e]">
+                      Gerencie a conexão do WhatsApp Business via Z-API
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Status */}
+                    <div className="flex items-center justify-between p-4 bg-[#21262d] rounded-xl">
+                      <div className="flex items-center gap-4">
+                        <div className={cn(
+                          "h-12 w-12 rounded-xl flex items-center justify-center",
+                          status.connected ? "bg-emerald-500/20" : "bg-red-500/20"
+                        )}>
+                          {status.connected ? (
+                            <CheckCircle2 className="h-6 w-6 text-emerald-400" />
+                          ) : (
+                            <XCircle className="h-6 w-6 text-red-400" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium text-[#e6edf3]">
+                            {status.connected ? 'WhatsApp Conectado' : 'WhatsApp Desconectado'}
+                          </p>
+                          <p className="text-sm text-[#8b949e]">
+                            {status.connected ? 'Pronto para enviar e receber mensagens' : 'Escaneie o QR Code para conectar'}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          onClick={checkStatus} 
+                          variant="outline" 
+                          size="sm"
+                          className="border-[#30363d] text-[#e6edf3] hover:bg-[#30363d]"
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Atualizar
+                        </Button>
+                        {status.connected && (
+                          <Button 
+                            onClick={disconnect} 
+                            variant="outline" 
+                            size="sm"
+                            className="border-[#f85149]/50 text-[#f85149] hover:bg-[#f85149]/20"
+                          >
+                            Desconectar
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* QR Code */}
+                    {!status.connected && (
+                      <div className="flex flex-col items-center gap-6 py-6">
+                        {status.qrcode ? (
+                          <>
+                            <div className="bg-white p-4 rounded-xl shadow-lg">
+                              <img 
+                                src={`data:image/png;base64,${status.qrcode}`}
+                                alt="QR Code"
+                                className="w-64 h-64"
+                              />
+                            </div>
+                            <div className="text-center">
+                              <p className="text-sm text-[#e6edf3] mb-1">Escaneie com seu WhatsApp</p>
+                              <p className="text-xs text-[#8b949e]">Configurações → Aparelhos Conectados → Conectar Aparelho</p>
+                            </div>
+                            {pollingQR && (
+                              <div className="flex items-center gap-2 text-sm text-[#8b949e]">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Aguardando conexão...
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <Button 
+                            onClick={handleConnect} 
+                            disabled={qrLoading}
+                            className="bg-[#238636] hover:bg-[#2ea043] text-white px-8"
+                          >
+                            {qrLoading ? (
+                              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Gerando...</>
+                            ) : (
+                              <><QrCode className="h-4 w-4 mr-2" /> Gerar QR Code</>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Connected Actions */}
+                    {status.connected && (
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <button 
+                          onClick={handleSyncHistory}
+                          disabled={syncing}
+                          className="flex items-center gap-4 p-4 bg-[#21262d] hover:bg-[#30363d] rounded-xl transition-colors disabled:opacity-50 text-left"
+                        >
+                          <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                            {syncing ? <Loader2 className="h-5 w-5 text-blue-400 animate-spin" /> : <History className="h-5 w-5 text-blue-400" />}
+                          </div>
+                          <div>
+                            <p className="font-medium text-[#e6edf3]">Sincronizar Histórico</p>
+                            <p className="text-xs text-[#8b949e]">Importar mensagens antigas</p>
+                          </div>
+                        </button>
+
+                        <button 
+                          onClick={restart}
+                          className="flex items-center gap-4 p-4 bg-[#21262d] hover:bg-[#30363d] rounded-xl transition-colors text-left"
+                        >
+                          <div className="h-10 w-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                            <RefreshCw className="h-5 w-5 text-yellow-400" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-[#e6edf3]">Reiniciar Instância</p>
+                            <p className="text-xs text-[#8b949e]">Resolver problemas de conexão</p>
+                          </div>
+                        </button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Webhook Info */}
+                <Card className="bg-[#161b22] border-[#30363d]">
+                  <CardHeader>
+                    <CardTitle className="text-[#e6edf3] text-sm">Configuração do Webhook</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-[#8b949e] mb-3">
+                      Configure esta URL no painel da Z-API para receber mensagens em tempo real:
+                    </p>
+                    <code className="block p-4 bg-[#0d1117] rounded-lg text-xs text-[#58a6ff] break-all font-mono">
+                      https://olifecuguxdfzwuzeaox.supabase.co/functions/v1/zapi-webhook
+                    </code>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
