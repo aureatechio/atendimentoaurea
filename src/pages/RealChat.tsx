@@ -17,6 +17,7 @@ import {
   ArrowLeft,
   X,
   Shield,
+  Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
@@ -30,6 +31,8 @@ import { MessageListSkeleton } from '@/components/chat/MessageSkeleton';
 import { EmptyState } from '@/components/chat/EmptyState';
 import { ForwardMessageModal } from '@/components/chat/ForwardMessageModal';
 import { ReplyMessage } from '@/components/chat/ReplyPreview';
+import { useAllConversationTags } from '@/hooks/useConversationTags';
+import { ConversationTagsPanel, ConversationTagsBadges } from '@/components/chat/ConversationTagsPanel';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,6 +43,7 @@ import {
 export default function RealChat() {
   const { hasRole, profile, user } = useAuth();
   const { conversations, loading: convLoading, markAsRead, refetch, fetchProfilePicture } = useRealConversations();
+  const { getTagsForConversation } = useAllConversationTags();
 
   // Update online status when user is on chat page
   const updateOnlineStatus = useCallback(async (isOnline: boolean) => {
@@ -402,12 +406,18 @@ export default function RealChat() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between mt-[2px]">
-                    <p className={cn(
-                      'text-[14px] truncate pr-3',
-                      conv.unread_count > 0 ? 'text-[#d1d7db]' : 'text-[#8696a0]'
-                    )}>
-                      {conv.last_message || 'Nenhuma mensagem'}
-                    </p>
+                    <div className="flex-1 min-w-0 pr-3">
+                      <p className={cn(
+                        'text-[14px] truncate',
+                        conv.unread_count > 0 ? 'text-[#d1d7db]' : 'text-[#8696a0]'
+                      )}>
+                        {conv.last_message || 'Nenhuma mensagem'}
+                      </p>
+                      <ConversationTagsBadges 
+                        conversationId={conv.id} 
+                        tags={getTagsForConversation(conv.id)} 
+                      />
+                    </div>
                     {conv.unread_count > 0 && (
                       <Badge className="h-[20px] min-w-[20px] px-[6px] text-[12px] font-medium bg-[#00a884] hover:bg-[#00a884] text-[#111b21] rounded-full flex-shrink-0 flex items-center justify-center">
                         {conv.unread_count > 99 ? '99+' : conv.unread_count}
@@ -475,6 +485,11 @@ export default function RealChat() {
                 </p>
               </div>
               
+              {/* Tags Panel */}
+              <div className="hidden lg:flex items-center flex-shrink-0 mr-2">
+                <ConversationTagsPanel conversationId={selectedConversation.id} />
+              </div>
+              
               <div className="flex items-center flex-shrink-0">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -497,6 +512,11 @@ export default function RealChat() {
                 </DropdownMenu>
               </div>
             </header>
+
+            {/* Mobile Tags Bar */}
+            <div className="lg:hidden px-3 py-2 bg-[#202c33] border-b border-[#222d34]">
+              <ConversationTagsPanel conversationId={selectedConversation.id} />
+            </div>
 
             {/* Messages Area */}
             <div
