@@ -395,7 +395,7 @@ export default function RealChat() {
                 
                 <div className="flex-1 min-w-0 py-[13px] border-b border-[#222d34]">
                   <div className="flex items-center justify-between">
-                    <span className="text-[17px] text-[#e9edef] truncate pr-3">
+                    <span className="text-[17px] text-[#e9edef] truncate pr-3 text-left">
                       {conv.name || conv.phone}
                     </span>
                     <span className={cn(
@@ -405,19 +405,24 @@ export default function RealChat() {
                       {formatMessageTime(conv.last_message_at)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between mt-[2px]">
-                    <div className="flex-1 min-w-0 pr-3">
-                      <p className={cn(
-                        'text-[14px] truncate',
-                        conv.unread_count > 0 ? 'text-[#d1d7db]' : 'text-[#8696a0]'
-                      )}>
-                        {conv.last_message || 'Nenhuma mensagem'}
-                      </p>
+                  
+                  {/* Tags row - between name and message */}
+                  {getTagsForConversation(conv.id).length > 0 && (
+                    <div className="mt-[2px]">
                       <ConversationTagsBadges 
                         conversationId={conv.id} 
                         tags={getTagsForConversation(conv.id)} 
                       />
                     </div>
+                  )}
+                  
+                  <div className="flex items-center justify-between mt-[2px]">
+                    <p className={cn(
+                      'text-[14px] truncate text-left flex-1 min-w-0 pr-3',
+                      conv.unread_count > 0 ? 'text-[#d1d7db]' : 'text-[#8696a0]'
+                    )}>
+                      {conv.last_message || 'Nenhuma mensagem'}
+                    </p>
                     {conv.unread_count > 0 && (
                       <Badge className="h-[20px] min-w-[20px] px-[6px] text-[12px] font-medium bg-[#00a884] hover:bg-[#00a884] text-[#111b21] rounded-full flex-shrink-0 flex items-center justify-center">
                         {conv.unread_count > 99 ? '99+' : conv.unread_count}
