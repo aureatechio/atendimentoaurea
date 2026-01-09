@@ -48,7 +48,13 @@ interface Agent {
   is_online: boolean;
   activeConversations: number;
   totalConversations: number;
+  resolvedConversations: number;
+  pendingConversations: number;
   avgResponseTime: number;
+  totalMessages: number;
+  todayMessages: number;
+  todayConversations: number;
+  resolutionRate: number;
 }
 
 interface DashboardStats {
@@ -155,6 +161,12 @@ export default function Admin() {
         .in('conversation_id', conversationIds)
         .order('created_at', { ascending: false });
 
+      // Fetch ALL messages with sender info for agent stats
+      const { data: allMessages } = await supabase
+        .from('messages')
+        .select('id, conversation_id, sender_type, created_at')
+        .in('conversation_id', conversationIds);
+
       // Group last messages by conversation
       const lastMessageByConv = new Map<string, { sender_type: string }>();
       lastMessages?.forEach(msg => {
@@ -193,13 +205,44 @@ export default function Admin() {
       const pending = profiles?.filter(p => !usersWithRoles.has(p.user_id)) || [];
       setPendingUsers(pending);
 
-      // Calculate agents with stats
+      // Calculate agents with detailed stats
       const agentsList: Agent[] = [];
       const rolesMap = new Map(roles?.map(r => [r.user_id, r.role]) || []);
       
       profiles?.forEach(p => {
         if (usersWithRoles.has(p.user_id)) {
           const agentConvs = convData?.filter(c => c.assigned_to === p.user_id) || [];
+          const agentConvIds = new Set(agentConvs.map(c => c.id));
+          
+          // Messages sent by agent (sender_type = 'agent') in their conversations
+          const agentMsgs = allMessages?.filter(m => 
+            agentConvIds.has(m.conversation_id) && m.sender_type === 'agent'
+          ) || [];
+          
+          const todayAgentMsgs = agentMsgs.filter(m => isToday(new Date(m.created_at)));
+          const todayAgentConvs = agentConvs.filter(c => isToday(new Date(c.created_at)));
+          const resolvedAgentConvs = agentConvs.filter(c => c.status === 'resolved');
+          const pendingAgentConvs = agentConvs.filter(c => c.status === 'pending');
+          
+          // Calculate avg response time for this agent
+          let agentResponseTime = 0;
+          let agentResponseCount = 0;
+          agentConvs.forEach(c => {
+            if (c.updated_at && c.created_at && c.status !== 'pending') {
+              const diff = new Date(c.updated_at).getTime() - new Date(c.created_at).getTime();
+              if (diff > 0 && diff < 86400000) {
+                agentResponseTime += diff;
+                agentResponseCount++;
+              }
+            }
+          });
+          const avgRespTime = agentResponseCount > 0 ? Math.round(agentResponseTime / agentResponseCount / 1000 / 60) : 0;
+          
+          // Resolution rate
+          const resolutionRate = agentConvs.length > 0 
+            ? Math.round((resolvedAgentConvs.length / agentConvs.length) * 100) 
+            : 0;
+
           agentsList.push({
             id: p.id,
             user_id: p.user_id,
@@ -209,10 +252,23 @@ export default function Admin() {
             is_online: p.is_online || false,
             activeConversations: agentConvs.filter(c => c.status === 'in_progress').length,
             totalConversations: agentConvs.length,
-            avgResponseTime: 0,
+            resolvedConversations: resolvedAgentConvs.length,
+            pendingConversations: pendingAgentConvs.length,
+            avgResponseTime: avgRespTime,
+            totalMessages: agentMsgs.length,
+            todayMessages: todayAgentMsgs.length,
+            todayConversations: todayAgentConvs.length,
+            resolutionRate,
           });
         }
       });
+      
+      // Sort agents by performance (resolution rate, then total conversations)
+      agentsList.sort((a, b) => {
+        if (b.resolutionRate !== a.resolutionRate) return b.resolutionRate - a.resolutionRate;
+        return b.totalConversations - a.totalConversations;
+      });
+      
       setAgents(agentsList);
 
       // Calculate conversation stats
@@ -848,98 +904,192 @@ export default function Admin() {
             {/* Team Tab */}
             {activeTab === 'team' && (
               <div className="space-y-6">
+                {/* Performance Summary */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card className="bg-[#161b22] border-[#30363d]">
+                    <CardContent className="p-4">
+                      <p className="text-xs text-[#8b949e] uppercase tracking-wide">Total Atendentes</p>
+                      <p className="text-2xl font-bold text-[#e6edf3] mt-1">{agents.length}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-[#161b22] border-[#30363d]">
+                    <CardContent className="p-4">
+                      <p className="text-xs text-[#8b949e] uppercase tracking-wide">Online Agora</p>
+                      <p className="text-2xl font-bold text-emerald-400 mt-1">{agents.filter(a => a.is_online).length}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-[#161b22] border-[#30363d]">
+                    <CardContent className="p-4">
+                      <p className="text-xs text-[#8b949e] uppercase tracking-wide">Taxa Resolução Média</p>
+                      <p className="text-2xl font-bold text-[#e6edf3] mt-1">
+                        {agents.length > 0 ? Math.round(agents.reduce((sum, a) => sum + a.resolutionRate, 0) / agents.length) : 0}%
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-[#161b22] border-[#30363d]">
+                    <CardContent className="p-4">
+                      <p className="text-xs text-[#8b949e] uppercase tracking-wide">Tempo Resp. Médio</p>
+                      <p className="text-2xl font-bold text-[#e6edf3] mt-1">
+                        {agents.length > 0 ? Math.round(agents.reduce((sum, a) => sum + a.avgResponseTime, 0) / agents.length) : 0}
+                        <span className="text-sm font-normal text-[#8b949e]">min</span>
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Agent Performance Cards */}
                 <Card className="bg-[#161b22] border-[#30363d]">
                   <CardHeader>
                     <CardTitle className="text-[#e6edf3] flex items-center gap-2">
-                      <UsersRound className="h-5 w-5" />
-                      Gerenciar Equipe
+                      <BarChart3 className="h-5 w-5" />
+                      Análise de Desempenho
                     </CardTitle>
                     <CardDescription className="text-[#8b949e]">
-                      Visualize e gerencie todos os membros da sua equipe de atendimento
+                      Métricas detalhadas de cada atendente ordenadas por performance
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     {agents.length === 0 ? (
                       <div className="text-center py-12">
                         <Users className="h-12 w-12 text-[#30363d] mx-auto mb-4" />
-                        <p className="text-[#8b949e]">Nenhum membro na equipe</p>
-                        <p className="text-sm text-[#8b949e] mt-1">Aprove usuários pendentes para adicionar à equipe</p>
+                        <p className="text-[#8b949e]">Nenhum atendente cadastrado</p>
                       </div>
                     ) : (
-                      <div className="divide-y divide-[#30363d]">
-                        {agents.map((agent) => (
-                          <div key={agent.id} className="flex items-center justify-between py-4 first:pt-0 last:pb-0">
-                            <div className="flex items-center gap-4">
-                              <div className="relative">
-                                <Avatar className="h-12 w-12">
-                                  <AvatarFallback className="bg-[#30363d] text-[#e6edf3] text-lg">
-                                    {agent.name.charAt(0).toUpperCase()}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div className={cn(
-                                  "absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-[#161b22]",
-                                  agent.is_online ? "bg-emerald-500" : "bg-[#8b949e]"
-                                )} />
-                              </div>
-                              <div>
-                                <p className="font-medium text-[#e6edf3]">{agent.name}</p>
-                                <p className="text-sm text-[#8b949e]">{agent.email}</p>
-                                <Badge variant="outline" className={cn("mt-1 text-[10px] border", getRoleColor(agent.role))}>
-                                  {getRoleLabel(agent.role)}
-                                </Badge>
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-4">
-                              <div className="hidden sm:flex items-center gap-6">
-                                <div className="text-center">
-                                  <p className="text-xl font-bold text-[#e6edf3]">{agent.activeConversations}</p>
-                                  <p className="text-xs text-[#8b949e]">Ativas</p>
+                      <div className="space-y-4">
+                        {agents.map((agent, index) => (
+                          <div key={agent.id} className="p-4 bg-[#21262d] rounded-xl">
+                            {/* Agent Header */}
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className="relative">
+                                  <div className={cn(
+                                    "absolute -top-1 -left-1 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold",
+                                    index === 0 ? "bg-yellow-500 text-black" :
+                                    index === 1 ? "bg-gray-400 text-black" :
+                                    index === 2 ? "bg-orange-600 text-white" :
+                                    "bg-[#30363d] text-[#8b949e]"
+                                  )}>
+                                    {index + 1}
+                                  </div>
+                                  <Avatar className="h-12 w-12">
+                                    <AvatarFallback className="bg-[#30363d] text-[#e6edf3] text-lg">
+                                      {agent.name.charAt(0).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className={cn(
+                                    "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#21262d]",
+                                    agent.is_online ? "bg-emerald-500" : "bg-[#8b949e]"
+                                  )} />
                                 </div>
-                                <div className="text-center">
-                                  <p className="text-xl font-bold text-[#e6edf3]">{agent.totalConversations}</p>
-                                  <p className="text-xs text-[#8b949e]">Total</p>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-[#e6edf3]">{agent.name}</p>
+                                    <Badge variant="outline" className={cn("text-[10px] border", getRoleColor(agent.role))}>
+                                      {getRoleLabel(agent.role)}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-xs text-[#8b949e]">{agent.email}</p>
                                 </div>
-                              </div>
-                              <div className={cn(
-                                "hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium",
-                                agent.is_online ? "bg-emerald-500/20 text-emerald-400" : "bg-[#30363d] text-[#8b949e]"
-                              )}>
-                                <Circle className={cn("h-2 w-2 fill-current", agent.is_online && "animate-pulse")} />
-                                {agent.is_online ? 'Online' : 'Offline'}
                               </div>
                               
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#30363d]">
-                                    <MoreVertical className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="bg-[#21262d] border-[#30363d]">
-                                  <DropdownMenuItem 
-                                    onClick={() => handleUserAction(agent, 'view')}
-                                    className="text-[#e6edf3] focus:bg-[#30363d] focus:text-[#e6edf3]"
-                                  >
-                                    <Eye className="h-4 w-4 mr-2" />
-                                    Ver detalhes
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    onClick={() => handleUserAction(agent, 'edit')}
-                                    className="text-[#e6edf3] focus:bg-[#30363d] focus:text-[#e6edf3]"
-                                  >
-                                    <Pencil className="h-4 w-4 mr-2" />
-                                    Editar
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator className="bg-[#30363d]" />
-                                  <DropdownMenuItem 
-                                    onClick={() => handleUserAction(agent, 'delete')}
-                                    className="text-[#f85149] focus:bg-[#f85149]/20 focus:text-[#f85149]"
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Remover acesso
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              <div className="flex items-center gap-2">
+                                <div className={cn(
+                                  "px-3 py-1 rounded-full text-xs font-medium",
+                                  agent.is_online ? "bg-emerald-500/20 text-emerald-400" : "bg-[#30363d] text-[#8b949e]"
+                                )}>
+                                  {agent.is_online ? '🟢 Online' : '⚫ Offline'}
+                                </div>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#30363d]">
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="bg-[#21262d] border-[#30363d]">
+                                    <DropdownMenuItem 
+                                      onClick={() => handleUserAction(agent, 'edit')}
+                                      className="text-[#e6edf3] focus:bg-[#30363d] focus:text-[#e6edf3]"
+                                    >
+                                      <Pencil className="h-4 w-4 mr-2" />
+                                      Editar
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator className="bg-[#30363d]" />
+                                    <DropdownMenuItem 
+                                      onClick={() => handleUserAction(agent, 'delete')}
+                                      className="text-[#f85149] focus:bg-[#f85149]/20 focus:text-[#f85149]"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Remover acesso
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </div>
+
+                            {/* Performance Metrics Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
+                              <div className="bg-[#161b22] rounded-lg p-3 text-center">
+                                <p className="text-xs text-[#8b949e] mb-1">Ativas</p>
+                                <p className="text-lg font-bold text-blue-400">{agent.activeConversations}</p>
+                              </div>
+                              <div className="bg-[#161b22] rounded-lg p-3 text-center">
+                                <p className="text-xs text-[#8b949e] mb-1">Pendentes</p>
+                                <p className="text-lg font-bold text-yellow-400">{agent.pendingConversations}</p>
+                              </div>
+                              <div className="bg-[#161b22] rounded-lg p-3 text-center">
+                                <p className="text-xs text-[#8b949e] mb-1">Resolvidas</p>
+                                <p className="text-lg font-bold text-emerald-400">{agent.resolvedConversations}</p>
+                              </div>
+                              <div className="bg-[#161b22] rounded-lg p-3 text-center">
+                                <p className="text-xs text-[#8b949e] mb-1">Total Convs</p>
+                                <p className="text-lg font-bold text-[#e6edf3]">{agent.totalConversations}</p>
+                              </div>
+                              <div className="bg-[#161b22] rounded-lg p-3 text-center">
+                                <p className="text-xs text-[#8b949e] mb-1">Msgs Enviadas</p>
+                                <p className="text-lg font-bold text-[#e6edf3]">{agent.totalMessages}</p>
+                              </div>
+                              <div className="bg-[#161b22] rounded-lg p-3 text-center">
+                                <p className="text-xs text-[#8b949e] mb-1">Tempo Resp.</p>
+                                <p className="text-lg font-bold text-[#e6edf3]">{agent.avgResponseTime}<span className="text-xs font-normal">min</span></p>
+                              </div>
+                            </div>
+
+                            {/* Resolution Rate Bar */}
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-[#8b949e]">Taxa de Resolução</span>
+                                <span className={cn(
+                                  "font-bold",
+                                  agent.resolutionRate >= 80 ? "text-emerald-400" :
+                                  agent.resolutionRate >= 50 ? "text-yellow-400" :
+                                  "text-red-400"
+                                )}>{agent.resolutionRate}%</span>
+                              </div>
+                              <div className="h-2 bg-[#161b22] rounded-full overflow-hidden">
+                                <div 
+                                  className={cn(
+                                    "h-full rounded-full transition-all",
+                                    agent.resolutionRate >= 80 ? "bg-emerald-500" :
+                                    agent.resolutionRate >= 50 ? "bg-yellow-500" :
+                                    "bg-red-500"
+                                  )}
+                                  style={{ width: `${agent.resolutionRate}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Today Stats */}
+                            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-[#30363d]">
+                              <div className="flex items-center gap-2 text-sm">
+                                <Calendar className="h-4 w-4 text-[#8b949e]" />
+                                <span className="text-[#8b949e]">Hoje:</span>
+                              </div>
+                              <Badge variant="outline" className="border-[#30363d] text-[#e6edf3]">
+                                {agent.todayConversations} conversas
+                              </Badge>
+                              <Badge variant="outline" className="border-[#30363d] text-[#e6edf3]">
+                                {agent.todayMessages} mensagens
+                              </Badge>
                             </div>
                           </div>
                         ))}
