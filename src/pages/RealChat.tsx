@@ -296,38 +296,38 @@ export default function RealChat() {
                 key={conv.id}
                 onClick={() => handleSelectConversation(conv)}
                 className={cn(
-                  'w-full flex items-center px-3 py-2 hover:bg-[#202c33] transition-colors active:bg-[#2a3942]',
+                  'w-full flex items-center px-3 hover:bg-[#202c33] transition-colors active:bg-[#2a3942]',
                   selectedConversation?.id === conv.id && 'bg-[#2a3942]'
                 )}
               >
-                <Avatar className="h-[50px] w-[50px] mr-3 flex-shrink-0">
+                <Avatar className="h-[49px] w-[49px] mr-[15px] flex-shrink-0">
                   {conv.avatar_url && <AvatarImage src={conv.avatar_url} className="object-cover" />}
                   <AvatarFallback className="bg-[#6a7175] text-white text-lg font-medium">
                     {(conv.name || conv.phone).charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 
-                <div className="flex-1 min-w-0 py-3 border-b border-[#222d34]">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-[17px] text-[#e9edef] truncate leading-tight">
+                <div className="flex-1 min-w-0 py-[13px] border-b border-[#222d34]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[17px] text-[#e9edef] truncate pr-3">
                       {conv.name || conv.phone}
                     </span>
                     <span className={cn(
-                      'text-xs flex-shrink-0 tabular-nums leading-none',
+                      'text-[12px] flex-shrink-0 tabular-nums',
                       conv.unread_count > 0 ? 'text-[#00a884]' : 'text-[#8696a0]'
                     )}>
                       {formatMessageTime(conv.last_message_at)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-3 mt-[2px]">
+                  <div className="flex items-center justify-between mt-[2px]">
                     <p className={cn(
-                      'text-[14px] truncate flex-1 leading-tight',
+                      'text-[14px] truncate pr-3',
                       conv.unread_count > 0 ? 'text-[#d1d7db]' : 'text-[#8696a0]'
                     )}>
                       {conv.last_message || 'Nenhuma mensagem'}
                     </p>
                     {conv.unread_count > 0 && (
-                      <Badge className="h-5 min-w-5 px-1.5 text-xs font-bold bg-[#00a884] hover:bg-[#00a884] text-[#111b21] rounded-full flex-shrink-0 flex items-center justify-center">
+                      <Badge className="h-[20px] min-w-[20px] px-[6px] text-[12px] font-medium bg-[#00a884] hover:bg-[#00a884] text-[#111b21] rounded-full flex-shrink-0 flex items-center justify-center">
                         {conv.unread_count > 99 ? '99+' : conv.unread_count}
                       </Badge>
                     )}
