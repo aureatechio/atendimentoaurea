@@ -225,11 +225,13 @@ export function useConversationTags(conversationId: string | null) {
       }
 
       toast.success('Tag atualizada');
+      // Force immediate refetch to update UI
+      await fetchConversationTags();
     } catch (err) {
       console.error('Error replacing tag:', err);
       toast.error('Erro ao atualizar tag');
     }
-  }, [conversationId]);
+  }, [conversationId, fetchConversationTags]);
 
   return {
     conversationTags,
