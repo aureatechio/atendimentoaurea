@@ -155,26 +155,53 @@ async function handleReceivedMessage(supabase: any, data: any) {
       console.log('✅ Created new conversation:', conversation.id);
     }
     
-    // Save the message
-    const { data: message, error: msgError } = await supabase
+    // Save the message (avoid duplicates when we sent via the app)
+    const { data: existingMsg, error: existingErr } = await supabase
       .from('messages')
-      .insert({
-        conversation_id: conversation.id,
-        content,
-        sender_type: senderType,
-        message_id: messageId,
-        status: fromMe ? 'sent' : 'delivered',
-        message_type: messageType,
-        media_url: mediaUrl,
-        media_mime_type: mediaMimeType,
-        media_caption: mediaCaption,
-        created_at: messageTimestamp,
-      })
-      .select()
-      .single();
-    
-    if (msgError) throw msgError;
-    console.log(`✅ Message saved (${senderType}):`, message.id);
+      .select('id')
+      .eq('message_id', messageId)
+      .maybeSingle();
+
+    if (existingErr) throw existingErr;
+
+    if (existingMsg) {
+      // Update status/content/media in case we had an optimistic row already
+      const { error: updErr } = await supabase
+        .from('messages')
+        .update({
+          status: fromMe ? 'sent' : 'delivered',
+          content,
+          message_type: messageType,
+          media_url: mediaUrl,
+          media_mime_type: mediaMimeType,
+          media_caption: mediaCaption,
+          created_at: messageTimestamp,
+        })
+        .eq('id', existingMsg.id);
+
+      if (updErr) throw updErr;
+      console.log(`✅ Message updated (dedup by message_id):`, existingMsg.id);
+    } else {
+      const { data: message, error: msgError } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversation.id,
+          content,
+          sender_type: senderType,
+          message_id: messageId,
+          status: fromMe ? 'sent' : 'delivered',
+          message_type: messageType,
+          media_url: mediaUrl,
+          media_mime_type: mediaMimeType,
+          media_caption: mediaCaption,
+          created_at: messageTimestamp,
+        })
+        .select()
+        .single();
+
+      if (msgError) throw msgError;
+      console.log(`✅ Message saved (${senderType}):`, message.id);
+    }
     
     // Update conversation last_message and unread_count
     const updateData: any = {
