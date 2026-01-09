@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Input } from '@/components/ui/input';
 import { 
   Send, 
   Paperclip, 
@@ -23,6 +24,12 @@ interface ChatInputProps {
   conversationId: string;
 }
 
+interface PendingFile {
+  file: File;
+  type: string;
+  previewUrl: string | null;
+}
+
 export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conversationId }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -30,6 +37,8 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
   const [uploading, setUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [pendingFile, setPendingFile] = useState<PendingFile | null>(null);
+  const [caption, setCaption] = useState('');
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -44,6 +53,21 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
       textarea.style.height = `${newHeight}px`;
     }
   }, [message]);
+
+  // Cleanup preview URL on unmount
+  useEffect(() => {
+    return () => {
+      if (pendingFile?.previewUrl) {
+        URL.revokeObjectURL(pendingFile.previewUrl);
+      }
+    };
+  }, [pendingFile]);
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   const handleSend = async () => {
     if (!message.trim() || sending) return;
@@ -69,7 +93,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
     }
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>, type: string) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -80,13 +104,35 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
     }
 
     setAttachOpen(false);
+
+    // Create preview URL for images and videos
+    let previewUrl: string | null = null;
+    if (type === 'image' || type === 'video') {
+      previewUrl = URL.createObjectURL(file);
+    }
+
+    setPendingFile({ file, type, previewUrl });
+    setCaption('');
+  };
+
+  const cancelPendingFile = () => {
+    if (pendingFile?.previewUrl) {
+      URL.revokeObjectURL(pendingFile.previewUrl);
+    }
+    setPendingFile(null);
+    setCaption('');
+  };
+
+  const sendPendingFile = async () => {
+    if (!pendingFile) return;
+
     setUploading(true);
 
     try {
-      const fileName = `${conversationId}/${Date.now()}-${file.name}`;
+      const fileName = `${conversationId}/${Date.now()}-${pendingFile.file.name}`;
       const { data, error } = await supabase.storage
         .from('chat-media')
-        .upload(fileName, file);
+        .upload(fileName, pendingFile.file);
 
       if (error) throw error;
 
@@ -94,8 +140,9 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
         .from('chat-media')
         .getPublicUrl(data.path);
 
-      await onSendMedia(type, urlData.publicUrl, file.name);
+      await onSendMedia(pendingFile.type, urlData.publicUrl, caption || pendingFile.file.name);
       toast.success('Mídia enviada!');
+      cancelPendingFile();
     } catch {
       toast.error('Erro ao enviar mídia');
     } finally {
@@ -185,6 +232,87 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
     { type: 'video', icon: Video, label: 'Vídeos', accept: 'video/*', color: 'bg-[#ee4a62]' },
     { type: 'document', icon: FileText, label: 'Documento', accept: '.pdf,.doc,.docx,.xls,.xlsx,.txt', color: 'bg-[#5157ae]' },
   ];
+
+  // Preview mode for pending file
+  if (pendingFile) {
+    return (
+      <div className="bg-[#111b21] border-t border-[#222d34]">
+        {/* Preview area */}
+        <div className="p-4 flex flex-col items-center gap-3">
+          {/* Close button */}
+          <div className="w-full flex justify-between items-center">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={cancelPendingFile}
+              className="h-10 w-10 rounded-full text-[#8696a0] hover:text-[#e9edef] hover:bg-[#374045]"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+            <div className="text-[#8696a0] text-sm">
+              <span className="font-medium text-[#e9edef]">{pendingFile.file.name}</span>
+              <span className="ml-2">({formatFileSize(pendingFile.file.size)})</span>
+            </div>
+            <div className="w-10" /> {/* Spacer */}
+          </div>
+
+          {/* Preview */}
+          <div className="max-w-[300px] max-h-[300px] rounded-lg overflow-hidden bg-[#202c33]">
+            {pendingFile.type === 'image' && pendingFile.previewUrl && (
+              <img 
+                src={pendingFile.previewUrl} 
+                alt="Preview" 
+                className="max-w-full max-h-[300px] object-contain"
+              />
+            )}
+            {pendingFile.type === 'video' && pendingFile.previewUrl && (
+              <video 
+                src={pendingFile.previewUrl} 
+                controls 
+                className="max-w-full max-h-[300px]"
+              />
+            )}
+            {pendingFile.type === 'document' && (
+              <div className="p-8 flex flex-col items-center gap-3">
+                <FileText className="h-16 w-16 text-[#5157ae]" />
+                <span className="text-[#e9edef] text-sm text-center truncate max-w-[200px]">
+                  {pendingFile.file.name}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Caption input and send */}
+        <div className="px-4 py-3 bg-[#202c33] flex items-center gap-2">
+          <Input
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            placeholder="Adicionar legenda..."
+            className="flex-1 bg-[#2a3942] border-none text-[#d1d7db] placeholder:text-[#8696a0] focus-visible:ring-0"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendPendingFile();
+              }
+            }}
+          />
+          <Button
+            onClick={sendPendingFile}
+            disabled={uploading}
+            size="icon"
+            className="h-11 w-11 rounded-full bg-[#00a884] hover:bg-[#00997a]"
+          >
+            {uploading ? (
+              <Loader2 className="h-5 w-5 animate-spin text-[#111b21]" />
+            ) : (
+              <Send className="h-5 w-5 text-[#111b21]" />
+            )}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (isRecording) {
     return (
