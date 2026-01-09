@@ -31,13 +31,18 @@ serve(async (req) => {
       });
     }
 
-    // Format phone for Z-API (add @c.us if needed)
-    const formattedPhone = phone.includes('@') ? phone : `${phone}@c.us`;
+    // Clean phone - remove any non-numeric characters
+    const cleanPhone = phone.replace(/\D/g, '');
 
-    // Fetch profile picture from Z-API
+    // Fetch profile picture from Z-API using query parameter
     const response = await fetch(
-      `https://api.z-api.io/instances/${instanceId}/token/${token}/profile-picture/${formattedPhone}`,
-      { method: 'GET' }
+      `https://api.z-api.io/instances/${instanceId}/token/${token}/profile-picture?phone=${cleanPhone}`,
+      { 
+        method: 'GET',
+        headers: {
+          'Client-Token': Deno.env.get('ZAPI_CLIENT_TOKEN') || '',
+        }
+      }
     );
 
     const data = await response.json();
