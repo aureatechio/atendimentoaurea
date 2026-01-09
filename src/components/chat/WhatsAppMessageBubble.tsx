@@ -277,23 +277,25 @@ export function WhatsAppMessageBubble({
         {showTail && <BubbleTail />}
 
         {/* Dropdown arrow - WhatsApp style inside bubble */}
-        {(onReply || onForward) && (
+        {(onReply || onForward) && showDropdown && (
           <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
             <DropdownMenuTrigger asChild>
               <button
                 className={cn(
-                  'absolute top-1 z-10 h-6 w-6 flex items-center justify-center rounded-full transition-opacity duration-150',
-                  isFromAgent ? 'right-1' : 'right-1',
-                  showDropdown ? 'opacity-100' : 'opacity-0',
-                  isFromAgent ? 'bg-[#005c4b]/80 hover:bg-[#005c4b]' : 'bg-[#202c33]/80 hover:bg-[#202c33]'
+                  'absolute top-1.5 right-1.5 z-10 h-5 w-5 flex items-center justify-center transition-all duration-100',
+                  isFromAgent 
+                    ? 'text-[#8696a0] hover:text-[#aebac1]' 
+                    : 'text-[#8696a0] hover:text-[#aebac1]'
                 )}
+                style={{ background: 'transparent' }}
               >
-                <ChevronDown className="h-5 w-5 text-[#8696a0]" />
+                <ChevronDown className="h-[18px] w-[18px]" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent 
               align={isFromAgent ? 'end' : 'start'} 
-              className="w-44 bg-[#233138] border-none shadow-xl rounded-md py-2"
+              sideOffset={4}
+              className="w-44 bg-[#233138] border-none shadow-xl rounded-md py-2 z-50"
             >
               {onReply && (
                 <DropdownMenuItem 
