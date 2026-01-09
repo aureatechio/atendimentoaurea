@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { useRealConversations, useRealMessages, RealConversation } from '@/hooks/useRealConversations';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { useRealConversations, useRealMessages, RealConversation, RealMessage } from '@/hooks/useRealConversations';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -20,11 +20,13 @@ import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { WhatsAppMessageBubble } from '@/components/chat/WhatsAppMessageBubble';
+import { WhatsAppMessageBubble, QuotedMessageData } from '@/components/chat/WhatsAppMessageBubble';
 import { WhatsAppChatInput } from '@/components/chat/WhatsAppChatInput';
 import { ConversationListSkeleton } from '@/components/chat/ConversationSkeleton';
 import { MessageListSkeleton } from '@/components/chat/MessageSkeleton';
 import { EmptyState } from '@/components/chat/EmptyState';
+import { ForwardMessageModal } from '@/components/chat/ForwardMessageModal';
+import { ReplyMessage } from '@/components/chat/ReplyPreview';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +43,7 @@ export default function RealChat() {
     error: msgError,
     sendMessage,
     sendMedia,
+    forwardMessage,
     refetch: refetchMessages,
   } = useRealMessages(selectedConversation?.id || null);
   const [syncing, setSyncing] = useState(false);
@@ -48,6 +51,20 @@ export default function RealChat() {
   const [showSearch, setShowSearch] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // Reply state
+  const [replyToMessage, setReplyToMessage] = useState<ReplyMessage | null>(null);
+  
+  // Forward state
+  const [forwardModalOpen, setForwardModalOpen] = useState(false);
+  const [messageToForward, setMessageToForward] = useState<RealMessage | null>(null);
+
+  // Build a map of messages by id for quick lookup of quoted messages
+  const messagesById = useCallback(() => {
+    const map = new Map<string, RealMessage>();
+    messages.forEach(m => map.set(m.id, m));
+    return map;
+  }, [messages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -458,9 +475,22 @@ export default function RealChat() {
                         const prevMsg = index > 0 ? msgs[index - 1] : null;
                         const showTail = !prevMsg || prevMsg.sender_type !== msg.sender_type;
                         
+                        // Get quoted message data if this message is a reply
+                        const quotedMsg = msg.reply_to_message_id 
+                          ? messagesById().get(msg.reply_to_message_id) 
+                          : null;
+                        const quotedMessageData: QuotedMessageData | null = quotedMsg ? {
+                          id: quotedMsg.id,
+                          content: quotedMsg.content,
+                          senderType: quotedMsg.sender_type,
+                          messageType: quotedMsg.message_type,
+                          mediaUrl: quotedMsg.media_url,
+                        } : null;
+                        
                         return (
                           <WhatsAppMessageBubble
                             key={msg.id}
+                            id={msg.id}
                             content={msg.content}
                             senderType={msg.sender_type}
                             status={msg.status}
@@ -470,6 +500,18 @@ export default function RealChat() {
                             mediaCaption={msg.media_caption}
                             animationDelay={index * 20}
                             showTail={showTail}
+                            quotedMessage={quotedMessageData}
+                            onReply={() => setReplyToMessage({
+                              id: msg.id,
+                              content: msg.content,
+                              senderType: msg.sender_type,
+                              messageType: msg.message_type,
+                              mediaUrl: msg.media_url,
+                            })}
+                            onForward={() => {
+                              setMessageToForward(msg);
+                              setForwardModalOpen(true);
+                            }}
                           />
                         );
                       })}
@@ -482,13 +524,31 @@ export default function RealChat() {
 
             {/* Input */}
             <WhatsAppChatInput
-              onSendMessage={sendMessage}
+              onSendMessage={(content, replyToId) => sendMessage(content, replyToId)}
               onSendMedia={sendMedia}
               conversationId={selectedConversation.id}
+              replyToMessage={replyToMessage}
+              onCancelReply={() => setReplyToMessage(null)}
             />
           </>
         )}
       </div>
+
+      {/* Forward Modal */}
+      <ForwardMessageModal
+        open={forwardModalOpen}
+        onOpenChange={setForwardModalOpen}
+        conversations={conversations.filter(c => c.id !== selectedConversation?.id)}
+        messagePreview={messageToForward?.content || ''}
+        onForward={async (targetIds) => {
+          if (!messageToForward) return;
+          for (const targetId of targetIds) {
+            await forwardMessage(messageToForward, targetId);
+          }
+          toast.success(`Mensagem encaminhada para ${targetIds.length} conversa${targetIds.length > 1 ? 's' : ''}!`);
+          setMessageToForward(null);
+        }}
+      />
     </div>
   );
 }

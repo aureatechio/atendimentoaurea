@@ -16,12 +16,15 @@ import {
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { ReplyPreview, ReplyMessage } from './ReplyPreview';
 
 interface ChatInputProps {
-  onSendMessage: (content: string) => Promise<void>;
+  onSendMessage: (content: string, replyToMessageId?: string) => Promise<void>;
   onSendMedia: (type: string, url: string, caption?: string) => Promise<void>;
   disabled?: boolean;
   conversationId: string;
+  replyToMessage?: ReplyMessage | null;
+  onCancelReply?: () => void;
 }
 
 interface PendingFile {
@@ -30,7 +33,7 @@ interface PendingFile {
   previewUrl: string | null;
 }
 
-export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conversationId }: ChatInputProps) {
+export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conversationId, replyToMessage, onCancelReply }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -75,8 +78,9 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
     
     setSending(true);
     try {
-      await onSendMessage(message.trim());
+      await onSendMessage(message.trim(), replyToMessage?.id);
       setMessage('');
+      onCancelReply?.();
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -412,7 +416,15 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
   }
 
   return (
-    <div className="px-2 md:px-4 py-2 md:py-3 bg-[#202c33] safe-area-bottom">
+    <div className="bg-[#202c33]">
+      {/* Reply Preview */}
+      {replyToMessage && (
+        <div className="px-4 pt-2">
+          <ReplyPreview message={replyToMessage} onCancel={onCancelReply || (() => {})} />
+        </div>
+      )}
+      
+      <div className="px-2 md:px-4 py-2 md:py-3 safe-area-bottom">
       <div className="flex items-end gap-1.5 md:gap-2">
         {/* Emoji button - hidden on small screens */}
         <Button
@@ -503,6 +515,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
             <Mic className="h-5 md:h-6 w-5 md:w-6 text-[#111b21]" />
           )}
         </Button>
+      </div>
       </div>
     </div>
   );
