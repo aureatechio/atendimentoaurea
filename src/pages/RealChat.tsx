@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function RealChat() {
-  const { conversations, loading: convLoading, markAsRead, refetch } = useRealConversations();
+  const { conversations, loading: convLoading, markAsRead, refetch, fetchProfilePicture } = useRealConversations();
   const [selectedConversation, setSelectedConversation] = useState<RealConversation | null>(null);
   const {
     messages,
@@ -63,6 +63,10 @@ export default function RealChat() {
     setSelectedConversation(conv);
     if (conv.unread_count > 0) {
       markAsRead(conv.id);
+    }
+    // Fetch profile picture if not available
+    if (!conv.avatar_url) {
+      fetchProfilePicture(conv.id, conv.phone);
     }
   };
 

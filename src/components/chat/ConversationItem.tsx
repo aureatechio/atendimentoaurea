@@ -1,8 +1,8 @@
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Conversation } from '@/types/chat';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Check, CheckCheck, Clock } from 'lucide-react';
@@ -11,12 +11,14 @@ interface ConversationItemProps {
   conversation: Conversation;
   isSelected: boolean;
   onClick: () => void;
+  onFetchAvatar?: (conversationId: string, phone: string) => void;
 }
 
 export const ConversationItem = memo(function ConversationItem({
   conversation,
   isSelected,
   onClick,
+  onFetchAvatar,
 }: ConversationItemProps) {
   const { contact, lastMessage, unreadCount, status, assignedTo } = conversation;
   
@@ -26,6 +28,13 @@ export const ConversationItem = memo(function ConversationItem({
     .slice(0, 2)
     .join('')
     .toUpperCase();
+
+  // Fetch avatar if not available
+  useEffect(() => {
+    if (!contact.avatar && onFetchAvatar && contact.phone) {
+      onFetchAvatar(conversation.id, contact.phone);
+    }
+  }, [contact.avatar, contact.phone, conversation.id, onFetchAvatar]);
 
   const timeAgo = lastMessage
     ? formatDistanceToNow(lastMessage.createdAt, { addSuffix: false, locale: ptBR })
@@ -72,6 +81,9 @@ export const ConversationItem = memo(function ConversationItem({
       {/* Avatar with status indicator */}
       <div className="relative flex-shrink-0">
         <Avatar className="h-12 w-12">
+          {contact.avatar && (
+            <AvatarImage src={contact.avatar} alt={contact.name} />
+          )}
           <AvatarFallback className="bg-primary/10 text-primary font-medium">
             {initials}
           </AvatarFallback>

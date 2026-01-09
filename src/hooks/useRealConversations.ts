@@ -125,7 +125,34 @@ export function useRealConversations() {
     }
   }, [fetchConversations]);
 
-  return { conversations, loading, error, refetch: fetchConversations, markAsRead };
+  const fetchProfilePicture = useCallback(async (conversationId: string, phone: string) => {
+    try {
+      const response = await fetch(
+        `https://olifecuguxdfzwuzeaox.supabase.co/functions/v1/zapi-get-profile-picture`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, conversationId }),
+        }
+      );
+
+      const result = await response.json();
+      
+      if (result.avatarUrl) {
+        // Optimistic update
+        setConversations(prev =>
+          prev.map(c => c.id === conversationId ? { ...c, avatar_url: result.avatarUrl } : c)
+        );
+      }
+      
+      return result.avatarUrl;
+    } catch (err) {
+      console.error('Error fetching profile picture:', err);
+      return null;
+    }
+  }, []);
+
+  return { conversations, loading, error, refetch: fetchConversations, markAsRead, fetchProfilePicture };
 }
 
 export function useRealMessages(conversationId: string | null) {
