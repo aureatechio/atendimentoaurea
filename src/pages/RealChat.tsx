@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRealConversations, useRealMessages, RealConversation, RealMessage } from '@/hooks/useRealConversations';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -37,8 +38,52 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function RealChat() {
-  const { hasRole, profile } = useAuth();
+  const { hasRole, profile, user } = useAuth();
   const { conversations, loading: convLoading, markAsRead, refetch, fetchProfilePicture } = useRealConversations();
+
+  // Update online status when user is on chat page
+  const updateOnlineStatus = useCallback(async (isOnline: boolean) => {
+    if (!user?.id) return;
+    
+    try {
+      await supabase
+        .from('profiles')
+        .update({ is_online: isOnline })
+        .eq('user_id', user.id);
+    } catch (error) {
+      console.error('Error updating online status:', error);
+    }
+  }, [user?.id]);
+
+  // Set online when component mounts, offline when unmounts
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Set online status
+    updateOnlineStatus(true);
+
+    // Handle visibility change (tab switching)
+    const handleVisibilityChange = () => {
+      updateOnlineStatus(!document.hidden);
+    };
+
+    // Handle before unload (closing tab/browser)
+    const handleBeforeUnload = () => {
+      // Use sendBeacon for reliable offline status update
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles?user_id=eq.${user.id}`;
+      navigator.sendBeacon(url, JSON.stringify({ is_online: false }));
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Set offline when component unmounts
+      updateOnlineStatus(false);
+    };
+  }, [user?.id, updateOnlineStatus]);
   const [selectedConversation, setSelectedConversation] = useState<RealConversation | null>(null);
   const {
     messages,
