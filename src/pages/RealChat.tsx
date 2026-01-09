@@ -458,6 +458,8 @@ export default function RealChat() {
                         const prevMsg = index > 0 ? msgs[index - 1] : null;
                         const showTail = !prevMsg || prevMsg.sender_type !== msg.sender_type;
                         
+                        console.log(`Msg ${index}: sender=${msg.sender_type}, prevSender=${prevMsg?.sender_type}, showTail=${showTail}`);
+                        
                         return (
                           <WhatsAppMessageBubble
                             key={msg.id}
