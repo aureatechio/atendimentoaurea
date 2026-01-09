@@ -367,6 +367,41 @@ export default function Admin() {
     fetchAllData();
   }, []);
 
+  // Realtime subscription for profile online status
+  useEffect(() => {
+    const channel = supabase
+      .channel('profiles-online-status')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+        },
+        (payload) => {
+          const updatedProfile = payload.new as { user_id: string; is_online: boolean };
+          
+          // Update agents list with new online status
+          setAgents(prev => prev.map(agent => 
+            agent.user_id === updatedProfile.user_id 
+              ? { ...agent, is_online: updatedProfile.is_online }
+              : agent
+          ));
+          
+          // Update stats active agents count
+          setStats(prev => ({
+            ...prev,
+            activeAgents: prev.activeAgents + (updatedProfile.is_online ? 1 : -1)
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   // Poll for QR code
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
