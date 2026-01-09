@@ -1,6 +1,15 @@
-import { Check, CheckCheck, Clock, AlertCircle, Play, Pause, Download, File, Mic, Image as ImageIcon } from 'lucide-react';
+import { Check, CheckCheck, Clock, AlertCircle, Play, Pause, Download, File, Mic, Image as ImageIcon, Reply, Forward, MoreVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useRef, useEffect } from 'react';
+import { MessageContextMenu } from './MessageContextMenu';
+import { QuotedMessage } from './QuotedMessage';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface MessageStatus {
   status: string;
@@ -28,7 +37,16 @@ export function MessageStatusIcon({ status, isFromAgent }: MessageStatus) {
   }
 }
 
+export interface QuotedMessageData {
+  id: string;
+  content: string;
+  senderType: 'customer' | 'agent';
+  messageType?: string;
+  mediaUrl?: string | null;
+}
+
 interface MessageBubbleProps {
+  id: string;
   content: string;
   senderType: 'customer' | 'agent';
   status: string;
@@ -39,9 +57,13 @@ interface MessageBubbleProps {
   mediaCaption?: string | null;
   animationDelay?: number;
   showTail?: boolean;
+  quotedMessage?: QuotedMessageData | null;
+  onReply?: () => void;
+  onForward?: () => void;
 }
 
 export function WhatsAppMessageBubble({
+  id,
   content,
   senderType,
   status,
@@ -51,6 +73,9 @@ export function WhatsAppMessageBubble({
   mediaCaption,
   animationDelay = 0,
   showTail = true,
+  quotedMessage,
+  onReply,
+  onForward,
 }: MessageBubbleProps) {
   const isFromAgent = senderType === 'agent';
   const [isPlaying, setIsPlaying] = useState(false);
@@ -58,6 +83,7 @@ export function WhatsAppMessageBubble({
   const [audioProgress, setAudioProgress] = useState(0);
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const [showActions, setShowActions] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const formatTime = (dateString: string) => {
@@ -222,11 +248,38 @@ export function WhatsAppMessageBubble({
     </div>
   );
 
-  return (
+  const bubbleContent = (
     <div 
-      className={cn('flex mb-[3px]', isFromAgent ? 'justify-end' : 'justify-start')}
+      className={cn('flex mb-[3px] group', isFromAgent ? 'justify-end' : 'justify-start')}
       style={{ animationDelay: `${animationDelay}ms` }}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
     >
+      {/* Actions dropdown for mobile/fallback */}
+      {!isFromAgent && showActions && (onReply || onForward) && (
+        <div className="flex items-start pt-1 pr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full bg-[#202c33]/80 hover:bg-[#202c33] text-[#8696a0]">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-40 bg-[#233138] border-none shadow-xl">
+              {onReply && (
+                <DropdownMenuItem onClick={onReply} className="text-[#d1d7db] hover:bg-[#182229] focus:bg-[#182229] cursor-pointer gap-2">
+                  <Reply className="h-4 w-4" /> Responder
+                </DropdownMenuItem>
+              )}
+              {onForward && (
+                <DropdownMenuItem onClick={onForward} className="text-[#d1d7db] hover:bg-[#182229] focus:bg-[#182229] cursor-pointer gap-2">
+                  <Forward className="h-4 w-4" /> Encaminhar
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+
       <div
         className={cn(
           'relative max-w-[85%] sm:max-w-[75%] md:max-w-[65%] rounded-lg px-[9px] py-[6px] shadow-sm',
@@ -236,6 +289,17 @@ export function WhatsAppMessageBubble({
         )}
       >
         {showTail && <BubbleTail />}
+
+        {/* Quoted message */}
+        {quotedMessage && (
+          <QuotedMessage
+            content={quotedMessage.content}
+            senderType={quotedMessage.senderType}
+            messageType={quotedMessage.messageType}
+            mediaUrl={quotedMessage.mediaUrl}
+            isFromAgent={isFromAgent}
+          />
+        )}
         
         {renderMedia()}
         
@@ -260,6 +324,46 @@ export function WhatsAppMessageBubble({
           </div>
         )}
       </div>
+
+      {/* Actions dropdown for agent messages */}
+      {isFromAgent && showActions && (onReply || onForward) && (
+        <div className="flex items-start pt-1 pl-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full bg-[#202c33]/80 hover:bg-[#202c33] text-[#8696a0]">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40 bg-[#233138] border-none shadow-xl">
+              {onReply && (
+                <DropdownMenuItem onClick={onReply} className="text-[#d1d7db] hover:bg-[#182229] focus:bg-[#182229] cursor-pointer gap-2">
+                  <Reply className="h-4 w-4" /> Responder
+                </DropdownMenuItem>
+              )}
+              {onForward && (
+                <DropdownMenuItem onClick={onForward} className="text-[#d1d7db] hover:bg-[#182229] focus:bg-[#182229] cursor-pointer gap-2">
+                  <Forward className="h-4 w-4" /> Encaminhar
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
     </div>
   );
+
+  // Wrap with context menu for desktop right-click
+  if (onReply || onForward) {
+    return (
+      <MessageContextMenu
+        onReply={onReply || (() => {})}
+        onForward={onForward || (() => {})}
+        messageContent={content}
+      >
+        {bubbleContent}
+      </MessageContextMenu>
+    );
+  }
+
+  return bubbleContent;
 }

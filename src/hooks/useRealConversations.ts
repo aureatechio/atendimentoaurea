@@ -27,6 +27,7 @@ export interface RealMessage {
   media_url: string | null;
   media_mime_type: string | null;
   media_caption: string | null;
+  reply_to_message_id: string | null;
 }
 
 export function useRealConversations() {
@@ -188,6 +189,7 @@ export function useRealMessages(conversationId: string | null) {
         media_url: m.media_url || null,
         media_mime_type: m.media_mime_type || null,
         media_caption: m.media_caption || null,
+        reply_to_message_id: (m as any).reply_to_message_id || null,
       })));
     } catch (err) {
       console.error('Error fetching messages:', err);
@@ -299,7 +301,7 @@ export function useRealMessages(conversationId: string | null) {
     };
   }, [conversationId, fetchMessages]);
 
-  const sendMessage = useCallback(async (content: string) => {
+  const sendMessage = useCallback(async (content: string, replyToMessageId?: string) => {
     if (!conversationId || !content.trim()) {
       toast.error('Mensagem não pode estar vazia');
       return;
@@ -330,6 +332,7 @@ export function useRealMessages(conversationId: string | null) {
       media_url: null,
       media_mime_type: null,
       media_caption: null,
+      reply_to_message_id: replyToMessageId || null,
     };
 
     // Add optimistic message
@@ -343,7 +346,8 @@ export function useRealMessages(conversationId: string | null) {
         sender_type: 'agent',
         status: 'sending',
         message_type: 'text',
-      })
+        reply_to_message_id: replyToMessageId || null,
+      } as any)
       .select()
       .single();
 
@@ -363,6 +367,7 @@ export function useRealMessages(conversationId: string | null) {
       media_url: null,
       media_mime_type: null,
       media_caption: null,
+      reply_to_message_id: (message as any).reply_to_message_id || null,
     } : m));
 
     try {
@@ -447,6 +452,7 @@ export function useRealMessages(conversationId: string | null) {
       media_url: mediaUrl,
       media_mime_type: null,
       media_caption: caption || null,
+      reply_to_message_id: null,
     };
 
     setMessages(prev => [...prev, optimisticMsg]);
@@ -480,6 +486,7 @@ export function useRealMessages(conversationId: string | null) {
       media_url: message.media_url || mediaUrl,
       media_mime_type: message.media_mime_type,
       media_caption: message.media_caption,
+      reply_to_message_id: (message as any).reply_to_message_id || null,
     } : m));
 
     try {
@@ -520,5 +527,57 @@ export function useRealMessages(conversationId: string | null) {
     }
   }, [conversationId]);
 
-  return { messages, loading, error, sendMessage, sendMedia, refetch: fetchMessages };
+  const forwardMessage = useCallback(async (message: RealMessage, targetConversationId: string) => {
+    const { data: conv } = await supabase
+      .from('conversations')
+      .select('phone')
+      .eq('id', targetConversationId)
+      .single();
+
+    if (!conv) {
+      toast.error('Conversa de destino não encontrada');
+      return;
+    }
+
+    // Insert forwarded message in DB
+    const { error } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: targetConversationId,
+        content: message.content,
+        sender_type: 'agent',
+        status: 'sending',
+        message_type: message.message_type,
+        media_url: message.media_url,
+        media_caption: message.media_caption,
+      });
+
+    if (error) {
+      console.error('Error forwarding message:', error);
+      toast.error('Erro ao encaminhar mensagem');
+      return;
+    }
+
+    // Send via Z-API
+    try {
+      await fetch(
+        `https://olifecuguxdfzwuzeaox.supabase.co/functions/v1/zapi-send`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: conv.phone,
+            message: message.message_type === 'text' ? message.content : undefined,
+            messageType: message.message_type,
+            mediaUrl: message.media_url,
+            caption: message.media_caption,
+          }),
+        }
+      );
+    } catch (err) {
+      console.error('Error sending forwarded message:', err);
+    }
+  }, []);
+
+  return { messages, loading, error, sendMessage, sendMedia, forwardMessage, refetch: fetchMessages };
 }
