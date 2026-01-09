@@ -272,57 +272,60 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
   // Preview mode for pending file
   if (pendingFile) {
     return (
-      <div className="bg-[#111b21] border-t border-[#222d34]">
-        {/* Preview area */}
-        <div className="p-4 flex flex-col items-center gap-3">
-          {/* Close button */}
-          <div className="w-full flex justify-between items-center">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={cancelPendingFile}
-              disabled={uploading}
-              className="h-10 w-10 rounded-full text-[#8696a0] hover:text-[#e9edef] hover:bg-[#374045] disabled:opacity-50"
-            >
-              <X className="h-5 w-5" />
-            </Button>
-            <div className="text-[#8696a0] text-sm">
-              <span className="font-medium text-[#e9edef]">{pendingFile.file.name}</span>
-              <span className="ml-2">({formatFileSize(pendingFile.file.size)})</span>
-            </div>
-            <div className="w-10" /> {/* Spacer */}
+      <div className="absolute inset-0 bg-[#0b141a] z-50 flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 bg-[#202c33]">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={cancelPendingFile}
+            disabled={uploading}
+            className="h-10 w-10 rounded-full text-[#aebac1] hover:text-[#e9edef] hover:bg-[#374045] disabled:opacity-50"
+          >
+            <X className="h-6 w-6" />
+          </Button>
+          <div className="text-center flex-1">
+            <p className="text-[#e9edef] font-medium truncate px-4">{pendingFile.file.name}</p>
+            <p className="text-[#8696a0] text-sm">{formatFileSize(pendingFile.file.size)}</p>
           </div>
+          <div className="w-10" /> {/* Spacer */}
+        </div>
 
-          {/* Preview */}
-          <div className="max-w-[300px] max-h-[300px] rounded-lg overflow-hidden bg-[#202c33]">
+        {/* Preview area - takes remaining space */}
+        <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
+          <div className="max-w-full max-h-full rounded-lg overflow-hidden bg-[#111b21] shadow-2xl">
             {pendingFile.type === 'image' && pendingFile.previewUrl && (
               <img 
                 src={pendingFile.previewUrl} 
                 alt="Preview" 
-                className="max-w-full max-h-[300px] object-contain"
+                className="max-w-full max-h-[60vh] object-contain"
               />
             )}
             {pendingFile.type === 'video' && pendingFile.previewUrl && (
               <video 
                 src={pendingFile.previewUrl} 
                 controls 
-                className="max-w-full max-h-[300px]"
+                autoPlay
+                muted
+                className="max-w-full max-h-[60vh]"
               />
             )}
             {pendingFile.type === 'document' && (
-              <div className="p-8 flex flex-col items-center gap-3">
-                <FileText className="h-16 w-16 text-[#5157ae]" />
-                <span className="text-[#e9edef] text-sm text-center truncate max-w-[200px]">
+              <div className="p-12 flex flex-col items-center gap-4">
+                <FileText className="h-24 w-24 text-[#5157ae]" />
+                <span className="text-[#e9edef] text-lg text-center max-w-[250px] truncate">
                   {pendingFile.file.name}
                 </span>
               </div>
             )}
           </div>
+        </div>
 
-          {/* Upload progress bar */}
-          {uploading && (
-            <div className="w-full max-w-[300px] space-y-2">
-              <div className="h-1.5 bg-[#374045] rounded-full overflow-hidden">
+        {/* Upload progress bar */}
+        {uploading && (
+          <div className="px-4 py-3 bg-[#111b21]">
+            <div className="max-w-md mx-auto space-y-2">
+              <div className="h-2 bg-[#374045] rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-[#00a884] rounded-full transition-all duration-300 ease-out"
                   style={{ width: `${uploadProgress}%` }}
@@ -333,34 +336,36 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
                 <span>Enviando... {uploadProgress}%</span>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Caption input and send */}
-        <div className="px-4 py-3 bg-[#202c33] flex items-center gap-2">
-          <Input
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            placeholder="Adicionar legenda..."
-            disabled={uploading}
-            className="flex-1 bg-[#2a3942] border-none text-[#d1d7db] placeholder:text-[#8696a0] focus-visible:ring-0 disabled:opacity-50"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !uploading) {
-                e.preventDefault();
-                sendPendingFile();
-              }
-            }}
-          />
+        <div className="px-4 py-3 bg-[#202c33] flex items-center gap-3 safe-area-bottom">
+          <div className="flex-1 bg-[#2a3942] rounded-lg">
+            <Input
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              placeholder="Adicionar legenda..."
+              disabled={uploading}
+              className="bg-transparent border-none text-[#d1d7db] placeholder:text-[#8696a0] focus-visible:ring-0 disabled:opacity-50 h-11"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !uploading) {
+                  e.preventDefault();
+                  sendPendingFile();
+                }
+              }}
+            />
+          </div>
           <Button
             onClick={sendPendingFile}
             disabled={uploading}
             size="icon"
-            className="h-11 w-11 rounded-full bg-[#00a884] hover:bg-[#00997a]"
+            className="h-12 w-12 rounded-full bg-[#00a884] hover:bg-[#00997a] flex-shrink-0"
           >
             {uploading ? (
-              <Loader2 className="h-5 w-5 animate-spin text-[#111b21]" />
+              <Loader2 className="h-6 w-6 animate-spin text-[#111b21]" />
             ) : (
-              <Send className="h-5 w-5 text-[#111b21]" />
+              <Send className="h-6 w-6 text-[#111b21]" />
             )}
           </Button>
         </div>
