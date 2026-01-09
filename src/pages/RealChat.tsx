@@ -453,19 +453,26 @@ export default function RealChat() {
                           {formatDateHeader(date)}
                         </span>
                       </div>
-                      {msgs.map((msg, index) => (
-                        <WhatsAppMessageBubble
-                          key={msg.id}
-                          content={msg.content}
-                          senderType={msg.sender_type}
-                          status={msg.status}
-                          createdAt={msg.created_at}
-                          messageType={msg.message_type}
-                          mediaUrl={msg.media_url}
-                          mediaCaption={msg.media_caption}
-                          animationDelay={index * 20}
-                        />
-                      ))}
+                      {msgs.map((msg, index) => {
+                        // Show tail only on first message of consecutive group from same sender
+                        const prevMsg = index > 0 ? msgs[index - 1] : null;
+                        const showTail = !prevMsg || prevMsg.sender_type !== msg.sender_type;
+                        
+                        return (
+                          <WhatsAppMessageBubble
+                            key={msg.id}
+                            content={msg.content}
+                            senderType={msg.sender_type}
+                            status={msg.status}
+                            createdAt={msg.created_at}
+                            messageType={msg.message_type}
+                            mediaUrl={msg.media_url}
+                            mediaCaption={msg.media_caption}
+                            animationDelay={index * 20}
+                            showTail={showTail}
+                          />
+                        );
+                      })}
                     </div>
                   ))}
                   <div ref={messagesEndRef} />

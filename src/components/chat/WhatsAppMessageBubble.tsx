@@ -38,6 +38,7 @@ interface MessageBubbleProps {
   mediaMimeType?: string | null;
   mediaCaption?: string | null;
   animationDelay?: number;
+  showTail?: boolean;
 }
 
 export function WhatsAppMessageBubble({
@@ -49,6 +50,7 @@ export function WhatsAppMessageBubble({
   mediaUrl,
   mediaCaption,
   animationDelay = 0,
+  showTail = true,
 }: MessageBubbleProps) {
   const isFromAgent = senderType === 'agent';
   const [isPlaying, setIsPlaying] = useState(false);
@@ -229,11 +231,11 @@ export function WhatsAppMessageBubble({
         className={cn(
           'relative max-w-[85%] sm:max-w-[75%] md:max-w-[65%] rounded-lg px-[9px] py-[6px] shadow-sm',
           isFromAgent
-            ? 'bg-[#005c4b] rounded-tr-none'
-            : 'bg-[#202c33] rounded-tl-none'
+            ? cn('bg-[#005c4b]', showTail && 'rounded-tr-none')
+            : cn('bg-[#202c33]', showTail && 'rounded-tl-none')
         )}
       >
-        <BubbleTail />
+        {showTail && <BubbleTail />}
         
         {renderMedia()}
         
