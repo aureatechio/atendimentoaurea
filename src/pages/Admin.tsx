@@ -57,6 +57,7 @@ interface DashboardStats {
   pendingConversations: number;
   inProgressConversations: number;
   resolvedConversations: number;
+  awaitingResponseConversations: number;
   avgResponseTime: number;
   totalMessages: number;
   todayMessages: number;
@@ -79,6 +80,7 @@ export default function Admin() {
     pendingConversations: 0,
     inProgressConversations: 0,
     resolvedConversations: 0,
+    awaitingResponseConversations: 0,
     avgResponseTime: 0,
     totalMessages: 0,
     todayMessages: 0,
@@ -131,9 +133,25 @@ export default function Admin() {
       // Fetch conversations
       const { data: conversations, error: convError } = await supabase
         .from('conversations')
-        .select('id, status, assigned_to, created_at, updated_at');
+        .select('id, status, assigned_to, created_at, updated_at, unread_count');
 
       if (convError) throw convError;
+
+      // Fetch last message for each conversation to check sender_type
+      const conversationIds = conversations?.map(c => c.id) || [];
+      const { data: lastMessages } = await supabase
+        .from('messages')
+        .select('conversation_id, sender_type, created_at')
+        .in('conversation_id', conversationIds)
+        .order('created_at', { ascending: false });
+
+      // Group last messages by conversation
+      const lastMessageByConv = new Map<string, { sender_type: string }>();
+      lastMessages?.forEach(msg => {
+        if (!lastMessageByConv.has(msg.conversation_id)) {
+          lastMessageByConv.set(msg.conversation_id, { sender_type: msg.sender_type });
+        }
+      });
 
       // Fetch messages for today
       const todayStart = startOfDay(new Date()).toISOString();
@@ -194,6 +212,12 @@ export default function Admin() {
       const inProgress = conversations?.filter(c => c.status === 'in_progress').length || 0;
       const resolved = conversations?.filter(c => c.status === 'resolved').length || 0;
 
+      // Calculate awaiting response - conversations where last message is from customer (not replied)
+      const awaitingResponse = conversations?.filter(c => {
+        const lastMsg = lastMessageByConv.get(c.id);
+        return lastMsg?.sender_type === 'customer' && c.status !== 'resolved';
+      }).length || 0;
+
       // Calculate yesterday for trend
       const yesterdayConvs = conversations?.filter(c => {
         const date = new Date(c.created_at);
@@ -225,6 +249,7 @@ export default function Admin() {
         pendingConversations: pending_,
         inProgressConversations: inProgress,
         resolvedConversations: resolved,
+        awaitingResponseConversations: awaitingResponse,
         avgResponseTime,
         totalMessages: totalMsgs || 0,
         todayMessages: todayMsgs?.length || 0,
@@ -430,7 +455,7 @@ export default function Admin() {
             {activeTab === 'dashboard' && (
               <div className="space-y-6">
                 {/* Quick Stats */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <Card className="bg-[#161b22] border-[#30363d]">
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
@@ -459,6 +484,29 @@ export default function Admin() {
                           <p className="text-2xl font-bold text-[#e6edf3] mt-1">{stats.todayMessages}</p>
                         </div>
                         <MessageSquare className="h-8 w-8 text-[#30363d]" />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className={cn(
+                    "border-[#30363d]",
+                    stats.awaitingResponseConversations > 0 
+                      ? "bg-orange-500/10 border-orange-500/30" 
+                      : "bg-[#161b22]"
+                  )}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-[#8b949e] uppercase tracking-wide">Sem Resposta</p>
+                          <p className={cn(
+                            "text-2xl font-bold mt-1",
+                            stats.awaitingResponseConversations > 0 ? "text-orange-400" : "text-[#e6edf3]"
+                          )}>{stats.awaitingResponseConversations}</p>
+                        </div>
+                        <AlertCircle className={cn(
+                          "h-8 w-8",
+                          stats.awaitingResponseConversations > 0 ? "text-orange-500/50" : "text-[#30363d]"
+                        )} />
                       </div>
                     </CardContent>
                   </Card>
@@ -544,6 +592,22 @@ export default function Admin() {
                             <div 
                               className="h-full bg-emerald-500 rounded-full" 
                               style={{ width: `${stats.totalConversations > 0 ? (stats.resolvedConversations / stats.totalConversations) * 100 : 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-3 w-3 rounded-full bg-orange-500" />
+                          <span className="text-sm text-[#e6edf3]">Sem Resposta</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-medium text-[#e6edf3]">{stats.awaitingResponseConversations}</span>
+                          <div className="w-24 h-2 bg-[#30363d] rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-orange-500 rounded-full" 
+                              style={{ width: `${stats.totalConversations > 0 ? (stats.awaitingResponseConversations / stats.totalConversations) * 100 : 0}%` }}
                             />
                           </div>
                         </div>
