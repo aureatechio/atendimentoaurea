@@ -21,8 +21,7 @@ interface AuthContextType {
   profile: Profile | null;
   roles: UserRole[];
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, name: string) => Promise<{ error: Error | null }>;
+  signInWithEmail: (email: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   hasRole: (role: 'admin' | 'supervisor' | 'agent') => boolean;
   isAgent: boolean;
@@ -100,23 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+  const signInWithEmail = async (email: string) => {
+    const { error } = await supabase.auth.signInWithOtp({
       email,
-      password,
-    });
-    return { error: error as Error | null };
-  };
-
-  const signUp = async (email: string, password: string, name: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
       options: {
         emailRedirectTo: window.location.origin,
-        data: {
-          name,
-        },
       },
     });
     return { error: error as Error | null };
@@ -141,8 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       roles,
       loading,
-      signIn,
-      signUp,
+      signInWithEmail,
       signOut,
       hasRole,
       isAgent,
