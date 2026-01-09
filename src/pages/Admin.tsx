@@ -15,8 +15,16 @@ import {
   Smartphone, History, TrendingUp, TrendingDown, AlertCircle,
   UserPlus, Settings2, Activity, Zap, Phone, Calendar,
   LayoutDashboard, UsersRound, Wifi, WifiOff, MoreVertical,
-  ChevronRight, Circle
+  ChevronRight, Circle, Eye, Pencil, Trash2
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import UserManagementModal from '@/components/admin/UserManagementModal';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -83,8 +91,39 @@ export default function Admin() {
   const [pollingQR, setPollingQR] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [approvingUser, setApprovingUser] = useState<string | null>(null);
+  const [selectedUser, setSelectedUser] = useState<Agent | null>(null);
+  const [modalMode, setModalMode] = useState<'view' | 'edit' | 'delete'>('view');
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [rejectingUser, setRejectingUser] = useState<string | null>(null);
 
   const isAdmin = hasRole('admin');
+
+  const handleUserAction = (agent: Agent, mode: 'view' | 'edit' | 'delete') => {
+    setSelectedUser(agent);
+    setModalMode(mode);
+    setShowUserModal(true);
+  };
+
+  const handleRejectUser = async (userId: string) => {
+    setRejectingUser(userId);
+    try {
+      // Delete profile to reject user
+      const { error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      toast.success('Cadastro rejeitado');
+      fetchAllData();
+    } catch (err) {
+      console.error('Error rejecting user:', err);
+      toast.error('Erro ao rejeitar cadastro');
+    } finally {
+      setRejectingUser(null);
+    }
+  };
 
   const fetchAllData = async () => {
     setLoading(true);
@@ -685,22 +724,56 @@ export default function Admin() {
                               </div>
                             </div>
                             
-                            <div className="flex items-center gap-6">
-                              <div className="text-center">
-                                <p className="text-xl font-bold text-[#e6edf3]">{agent.activeConversations}</p>
-                                <p className="text-xs text-[#8b949e]">Ativas</p>
-                              </div>
-                              <div className="text-center">
-                                <p className="text-xl font-bold text-[#e6edf3]">{agent.totalConversations}</p>
-                                <p className="text-xs text-[#8b949e]">Total</p>
+                            <div className="flex items-center gap-4">
+                              <div className="hidden sm:flex items-center gap-6">
+                                <div className="text-center">
+                                  <p className="text-xl font-bold text-[#e6edf3]">{agent.activeConversations}</p>
+                                  <p className="text-xs text-[#8b949e]">Ativas</p>
+                                </div>
+                                <div className="text-center">
+                                  <p className="text-xl font-bold text-[#e6edf3]">{agent.totalConversations}</p>
+                                  <p className="text-xs text-[#8b949e]">Total</p>
+                                </div>
                               </div>
                               <div className={cn(
-                                "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium",
+                                "hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium",
                                 agent.is_online ? "bg-emerald-500/20 text-emerald-400" : "bg-[#30363d] text-[#8b949e]"
                               )}>
                                 <Circle className={cn("h-2 w-2 fill-current", agent.is_online && "animate-pulse")} />
                                 {agent.is_online ? 'Online' : 'Offline'}
                               </div>
+                              
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#30363d]">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="bg-[#21262d] border-[#30363d]">
+                                  <DropdownMenuItem 
+                                    onClick={() => handleUserAction(agent, 'view')}
+                                    className="text-[#e6edf3] focus:bg-[#30363d] focus:text-[#e6edf3]"
+                                  >
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    Ver detalhes
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={() => handleUserAction(agent, 'edit')}
+                                    className="text-[#e6edf3] focus:bg-[#30363d] focus:text-[#e6edf3]"
+                                  >
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                    Editar
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator className="bg-[#30363d]" />
+                                  <DropdownMenuItem 
+                                    onClick={() => handleUserAction(agent, 'delete')}
+                                    className="text-[#f85149] focus:bg-[#f85149]/20 focus:text-[#f85149]"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Remover acesso
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </div>
                         ))}
@@ -773,9 +846,15 @@ export default function Admin() {
                               <Button 
                                 variant="ghost" 
                                 size="icon"
+                                onClick={() => handleRejectUser(user.user_id)}
+                                disabled={rejectingUser === user.user_id}
                                 className="text-[#f85149] hover:text-[#f85149] hover:bg-[#f85149]/20"
                               >
-                                <UserX className="h-5 w-5" />
+                                {rejectingUser === user.user_id ? (
+                                  <Loader2 className="h-5 w-5 animate-spin" />
+                                ) : (
+                                  <UserX className="h-5 w-5" />
+                                )}
                               </Button>
                             </div>
                           </div>
@@ -940,6 +1019,14 @@ export default function Admin() {
           </>
         )}
       </div>
+
+      <UserManagementModal
+        open={showUserModal}
+        onClose={() => setShowUserModal(false)}
+        user={selectedUser}
+        mode={modalMode}
+        onSuccess={fetchAllData}
+      />
     </div>
   );
 }
