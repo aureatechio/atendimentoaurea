@@ -35,6 +35,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
   const [sending, setSending] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null);
@@ -127,18 +128,52 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
     if (!pendingFile) return;
 
     setUploading(true);
+    setUploadProgress(0);
 
     try {
       const fileName = `${conversationId}/${Date.now()}-${pendingFile.file.name}`;
-      const { data, error } = await supabase.storage
-        .from('chat-media')
-        .upload(fileName, pendingFile.file);
+      
+      // Use XMLHttpRequest for progress tracking
+      const formData = new FormData();
+      formData.append('file', pendingFile.file);
 
-      if (error) throw error;
+      // Get the upload URL from Supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      
+      const uploadUrl = `${supabaseUrl}/storage/v1/object/chat-media/${fileName}`;
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            setUploadProgress(percent);
+          }
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(new Error(`Upload failed: ${xhr.status}`));
+          }
+        });
+
+        xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+
+        xhr.open('POST', uploadUrl);
+        xhr.setRequestHeader('Authorization', `Bearer ${session?.access_token || supabaseKey}`);
+        xhr.setRequestHeader('apikey', supabaseKey);
+        xhr.setRequestHeader('x-upsert', 'true');
+        xhr.send(pendingFile.file);
+      });
 
       const { data: urlData } = supabase.storage
         .from('chat-media')
-        .getPublicUrl(data.path);
+        .getPublicUrl(fileName);
 
       await onSendMedia(pendingFile.type, urlData.publicUrl, caption || pendingFile.file.name);
       toast.success('Mídia enviada!');
@@ -147,6 +182,7 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
       toast.error('Erro ao enviar mídia');
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -245,7 +281,8 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
               variant="ghost"
               size="icon"
               onClick={cancelPendingFile}
-              className="h-10 w-10 rounded-full text-[#8696a0] hover:text-[#e9edef] hover:bg-[#374045]"
+              disabled={uploading}
+              className="h-10 w-10 rounded-full text-[#8696a0] hover:text-[#e9edef] hover:bg-[#374045] disabled:opacity-50"
             >
               <X className="h-5 w-5" />
             </Button>
@@ -281,6 +318,22 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
               </div>
             )}
           </div>
+
+          {/* Upload progress bar */}
+          {uploading && (
+            <div className="w-full max-w-[300px] space-y-2">
+              <div className="h-1.5 bg-[#374045] rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-[#00a884] rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-center gap-2 text-[#8696a0] text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Enviando... {uploadProgress}%</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Caption input and send */}
@@ -289,9 +342,10 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
             placeholder="Adicionar legenda..."
-            className="flex-1 bg-[#2a3942] border-none text-[#d1d7db] placeholder:text-[#8696a0] focus-visible:ring-0"
+            disabled={uploading}
+            className="flex-1 bg-[#2a3942] border-none text-[#d1d7db] placeholder:text-[#8696a0] focus-visible:ring-0 disabled:opacity-50"
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Enter' && !e.shiftKey && !uploading) {
                 e.preventDefault();
                 sendPendingFile();
               }
