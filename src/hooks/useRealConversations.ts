@@ -223,8 +223,18 @@ export function useRealMessages(conversationId: string | null) {
           if (payload.eventType === 'INSERT') {
             const newMsg = payload.new as RealMessage;
             setMessages(prev => {
-              // Avoid duplicates
+              // Avoid duplicates - check by id or by matching temp messages
               if (prev.some(m => m.id === newMsg.id)) return prev;
+              // Also check if we already have this message (replaced from optimistic)
+              // by checking media_url + sender_type + approximate time
+              const isDuplicate = prev.some(m => 
+                m.media_url === newMsg.media_url && 
+                m.sender_type === newMsg.sender_type &&
+                m.message_type === newMsg.message_type &&
+                Math.abs(new Date(m.created_at).getTime() - new Date(newMsg.created_at).getTime()) < 5000
+              );
+              if (isDuplicate) return prev;
+              
               return [...prev, {
                 ...newMsg,
                 sender_type: newMsg.sender_type as 'customer' | 'agent',
