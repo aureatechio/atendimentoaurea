@@ -186,11 +186,57 @@ export function useConversationTags(conversationId: string | null) {
     }
   }, [conversationId]);
 
+  // Replace a tag with another (atomic operation for changing tags)
+  const replaceTag = useCallback(async (oldTagId: string | null, newTagId: string) => {
+    if (!conversationId) return;
+
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      
+      // First remove old tag if exists
+      if (oldTagId) {
+        const { error: deleteError } = await supabase
+          .from('conversation_tags')
+          .delete()
+          .eq('conversation_id', conversationId)
+          .eq('tag_id', oldTagId);
+
+        if (deleteError) {
+          console.error('Error removing old tag:', deleteError);
+        }
+      }
+
+      // Then add new tag
+      const { error: insertError } = await supabase
+        .from('conversation_tags')
+        .insert({
+          conversation_id: conversationId,
+          tag_id: newTagId,
+          applied_by: user?.user?.id || null,
+        });
+
+      if (insertError) {
+        if (insertError.code === '23505') {
+          toast.error('Tag já aplicada');
+        } else {
+          throw insertError;
+        }
+        return;
+      }
+
+      toast.success('Tag atualizada');
+    } catch (err) {
+      console.error('Error replacing tag:', err);
+      toast.error('Erro ao atualizar tag');
+    }
+  }, [conversationId]);
+
   return {
     conversationTags,
     loading,
     addTag,
     removeTag,
+    replaceTag,
     refetch: fetchConversationTags,
   };
 }
