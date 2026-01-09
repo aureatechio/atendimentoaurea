@@ -25,10 +25,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import UserManagementModal from '@/components/admin/UserManagementModal';
+import { 
+  ConversationsChart, 
+  StatusDistributionChart, 
+  AgentPerformanceChart, 
+  HourlyActivityChart 
+} from '@/components/admin/DashboardCharts';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { format, subDays, isToday, startOfDay, endOfDay } from 'date-fns';
+import { format, subDays, isToday, startOfDay, endOfDay, eachDayOfInterval, getHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface PendingUser {
@@ -78,6 +84,13 @@ interface DashboardStats {
   avgConversationsPerAgent: number;
 }
 
+interface ChartData {
+  conversationsLast7Days: { date: string; conversations: number; messages: number }[];
+  statusDistribution: { name: string; value: number; color: string }[];
+  agentPerformance: { name: string; resolved: number; pending: number; active: number }[];
+  hourlyActivity: { hour: string; messages: number }[];
+}
+
 export default function Admin() {
   const { hasRole, profile } = useAuth();
   const { status, loading: zapiLoading, qrLoading, checkStatus, getQRCode, disconnect, restart } = useZAPIConnection();
@@ -104,6 +117,12 @@ export default function Admin() {
     avgMessagesPerConversation: 0,
     resolvedTodayConversations: 0,
     avgConversationsPerAgent: 0,
+  });
+  const [chartData, setChartData] = useState<ChartData>({
+    conversationsLast7Days: [],
+    statusDistribution: [],
+    agentPerformance: [],
+    hourlyActivity: [],
   });
   const [loading, setLoading] = useState(true);
   const [pollingQR, setPollingQR] = useState(false);
@@ -333,6 +352,71 @@ export default function Admin() {
       const avgConvsPerAgent = agentsList.length > 0 
         ? Math.round(total / agentsList.length) 
         : 0;
+
+      // ========== CHART DATA CALCULATIONS ==========
+      
+      // 1. Last 7 days data
+      const last7Days = eachDayOfInterval({
+        start: subDays(new Date(), 6),
+        end: new Date()
+      });
+      
+      const conversationsLast7Days = last7Days.map(day => {
+        const dayStart = startOfDay(day);
+        const dayEnd = endOfDay(day);
+        
+        const dayConvs = convData?.filter(c => {
+          const createdAt = new Date(c.created_at);
+          return createdAt >= dayStart && createdAt <= dayEnd;
+        }).length || 0;
+        
+        const dayMsgs = allMessages?.filter(m => {
+          const createdAt = new Date(m.created_at);
+          return createdAt >= dayStart && createdAt <= dayEnd;
+        }).length || 0;
+        
+        return {
+          date: format(day, 'dd/MM', { locale: ptBR }),
+          conversations: dayConvs,
+          messages: dayMsgs
+        };
+      });
+
+      // 2. Status distribution
+      const statusDistribution = [
+        { name: 'Aguardando', value: pending_, color: '#eab308' },
+        { name: 'Em Atendimento', value: inProgress, color: '#3b82f6' },
+        { name: 'Resolvidos', value: resolved, color: '#10b981' },
+        { name: 'Sem Resposta', value: awaitingResponse, color: '#f97316' },
+      ];
+
+      // 3. Agent performance (top 5)
+      const agentPerformance = agentsList.slice(0, 5).map(agent => ({
+        name: agent.name.split(' ')[0],
+        resolved: agent.resolvedConversations,
+        pending: agent.pendingConversations,
+        active: agent.activeConversations,
+      }));
+
+      // 4. Hourly activity for today
+      const hourlyActivity = Array.from({ length: 24 }, (_, i) => {
+        const hourMsgs = todayMsgs?.filter(m => {
+          const msgHour = getHours(new Date(m.created_at));
+          return msgHour === i;
+        }).length || 0;
+        
+        return {
+          hour: `${i.toString().padStart(2, '0')}h`,
+          messages: hourMsgs
+        };
+      });
+
+      setChartData({
+        conversationsLast7Days,
+        statusDistribution,
+        agentPerformance,
+        hourlyActivity,
+      });
 
       setStats({
         totalConversations: total,
@@ -731,95 +815,25 @@ export default function Admin() {
                   </Card>
                 </div>
 
-                {/* Status Overview */}
+                {/* Charts Section */}
                 <div className="grid md:grid-cols-2 gap-6">
-                  {/* Conversation Status */}
-                  <Card className="bg-[#161b22] border-[#30363d]">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-[#e6edf3] text-base font-medium flex items-center gap-2">
-                        <Activity className="h-4 w-4 text-[#8b949e]" />
-                        Status das Conversas
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="h-3 w-3 rounded-full bg-yellow-500" />
-                          <span className="text-sm text-[#e6edf3]">Aguardando</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-medium text-[#e6edf3]">{stats.pendingConversations}</span>
-                          <div className="w-24 h-2 bg-[#30363d] rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-yellow-500 rounded-full" 
-                              style={{ width: `${stats.totalConversations > 0 ? (stats.pendingConversations / stats.totalConversations) * 100 : 0}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
+                  <ConversationsChart data={chartData.conversationsLast7Days} />
+                  <StatusDistributionChart data={chartData.statusDistribution} />
+                </div>
 
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="h-3 w-3 rounded-full bg-blue-500" />
-                          <span className="text-sm text-[#e6edf3]">Em Atendimento</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-medium text-[#e6edf3]">{stats.inProgressConversations}</span>
-                          <div className="w-24 h-2 bg-[#30363d] rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-blue-500 rounded-full" 
-                              style={{ width: `${stats.totalConversations > 0 ? (stats.inProgressConversations / stats.totalConversations) * 100 : 0}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
+                {/* Second Row Charts */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  <AgentPerformanceChart data={chartData.agentPerformance} />
+                  <HourlyActivityChart data={chartData.hourlyActivity} />
+                </div>
 
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="h-3 w-3 rounded-full bg-emerald-500" />
-                          <span className="text-sm text-[#e6edf3]">Resolvidos</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-medium text-[#e6edf3]">{stats.resolvedConversations}</span>
-                          <div className="w-24 h-2 bg-[#30363d] rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-emerald-500 rounded-full" 
-                              style={{ width: `${stats.totalConversations > 0 ? (stats.resolvedConversations / stats.totalConversations) * 100 : 0}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="h-3 w-3 rounded-full bg-orange-500" />
-                          <span className="text-sm text-[#e6edf3]">Sem Resposta</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-medium text-[#e6edf3]">{stats.awaitingResponseConversations}</span>
-                          <div className="w-24 h-2 bg-[#30363d] rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-orange-500 rounded-full" 
-                              style={{ width: `${stats.totalConversations > 0 ? (stats.awaitingResponseConversations / stats.totalConversations) * 100 : 0}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="pt-3 border-t border-[#30363d]">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-[#8b949e]">Total de Conversas</span>
-                          <span className="font-semibold text-[#e6edf3]">{stats.totalConversations}</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
+                {/* Quick Actions & Team Overview */}
+                <div className="grid md:grid-cols-2 gap-6">
                   {/* Quick Actions */}
                   <Card className="bg-[#161b22] border-[#30363d]">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-[#e6edf3] text-base font-medium flex items-center gap-2">
-                        <Zap className="h-4 w-4 text-[#8b949e]" />
+                        <Zap className="h-4 w-4 text-yellow-400" />
                         Ações Rápidas
                       </CardTitle>
                     </CardHeader>
@@ -877,62 +891,71 @@ export default function Admin() {
                       </button>
                     </CardContent>
                   </Card>
-                </div>
 
-                {/* Team Overview */}
-                <Card className="bg-[#161b22] border-[#30363d]">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-[#e6edf3] text-base font-medium flex items-center gap-2">
-                        <UsersRound className="h-4 w-4 text-[#8b949e]" />
-                        Equipe de Atendimento
-                      </CardTitle>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setActiveTab('team')}
-                        className="text-[#58a6ff] hover:text-[#58a6ff] hover:bg-[#21262d]"
-                      >
-                        Ver todos
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {agents.length === 0 ? (
-                      <p className="text-[#8b949e] text-sm text-center py-8">Nenhum atendente cadastrado</p>
-                    ) : (
-                      <div className="space-y-3">
-                        {agents.slice(0, 5).map((agent) => (
-                          <div key={agent.id} className="flex items-center justify-between p-3 bg-[#21262d] rounded-lg">
-                            <div className="flex items-center gap-3">
-                              <div className="relative">
-                                <Avatar className="h-10 w-10">
-                                  <AvatarFallback className="bg-[#30363d] text-[#e6edf3]">
-                                    {agent.name.charAt(0).toUpperCase()}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div className={cn(
-                                  "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#21262d]",
-                                  agent.is_online ? "bg-emerald-500" : "bg-[#8b949e]"
-                                )} />
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-[#e6edf3]">{agent.name}</p>
-                                <Badge variant="outline" className={cn("text-[10px] border", getRoleColor(agent.role))}>
-                                  {getRoleLabel(agent.role)}
-                                </Badge>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-lg font-semibold text-[#e6edf3]">{agent.activeConversations}</p>
-                              <p className="text-xs text-[#8b949e]">em atendimento</p>
-                            </div>
-                          </div>
-                        ))}
+                  {/* Team Overview */}
+                  <Card className="bg-[#161b22] border-[#30363d]">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-[#e6edf3] text-base font-medium flex items-center gap-2">
+                          <UsersRound className="h-4 w-4 text-blue-400" />
+                          Equipe de Atendimento
+                        </CardTitle>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => setActiveTab('team')}
+                          className="text-[#58a6ff] hover:text-[#58a6ff] hover:bg-[#21262d]"
+                        >
+                          Ver todos
+                        </Button>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
+                    </CardHeader>
+                    <CardContent>
+                      {agents.length === 0 ? (
+                        <p className="text-[#8b949e] text-sm text-center py-8">Nenhum atendente cadastrado</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {agents.slice(0, 4).map((agent, index) => (
+                            <div key={agent.id} className="flex items-center justify-between p-3 bg-[#21262d] rounded-lg">
+                              <div className="flex items-center gap-3">
+                                <div className="relative">
+                                  <Avatar className="h-10 w-10">
+                                    <AvatarFallback className={cn(
+                                      "text-white font-semibold",
+                                      index === 0 ? "bg-gradient-to-br from-yellow-400 to-orange-500" :
+                                      index === 1 ? "bg-gradient-to-br from-gray-300 to-gray-400" :
+                                      index === 2 ? "bg-gradient-to-br from-amber-600 to-amber-700" :
+                                      "bg-[#30363d]"
+                                    )}>
+                                      {agent.name.charAt(0).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className={cn(
+                                    "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#21262d]",
+                                    agent.is_online ? "bg-emerald-500" : "bg-[#8b949e]"
+                                  )} />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-[#e6edf3]">{agent.name}</p>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className={cn("text-[10px] border", getRoleColor(agent.role))}>
+                                      {getRoleLabel(agent.role)}
+                                    </Badge>
+                                    <span className="text-[10px] text-[#8b949e]">{agent.resolutionRate}% resolução</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-lg font-semibold text-[#e6edf3]">{agent.activeConversations}</p>
+                                <p className="text-xs text-[#8b949e]">em atend.</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
             )}
 
