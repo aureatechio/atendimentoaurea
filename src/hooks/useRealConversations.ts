@@ -223,23 +223,56 @@ export function useRealMessages(conversationId: string | null) {
           if (payload.eventType === 'INSERT') {
             const newMsg = payload.new as RealMessage;
             setMessages(prev => {
-              // Avoid duplicates - check by id or by matching temp messages
+              // Avoid duplicates by id
               if (prev.some(m => m.id === newMsg.id)) return prev;
-              // Also check if we already have this message (replaced from optimistic)
-              // by checking media_url + sender_type + approximate time
-              const isDuplicate = prev.some(m => 
-                m.media_url === newMsg.media_url && 
-                m.sender_type === newMsg.sender_type &&
-                m.message_type === newMsg.message_type &&
-                Math.abs(new Date(m.created_at).getTime() - new Date(newMsg.created_at).getTime()) < 5000
-              );
+
+              const normalizeType = (t: string | null | undefined) => (t || 'text');
+              const newType = normalizeType(newMsg.message_type);
+              const newCreatedAt = Date.parse(newMsg.created_at);
+
+              // If the INSERT arrives before we replace the optimistic temp message,
+              // replace the temp message instead of appending (prevents double render).
+              const tempIndex = prev.findIndex(m => {
+                if (!m.id.startsWith('temp-')) return false;
+                if (m.sender_type !== (newMsg.sender_type as any)) return false;
+                if (normalizeType(m.message_type) !== newType) return false;
+                if ((m.media_url || null) !== (newMsg.media_url || null)) return false;
+
+                const mCreatedAt = Date.parse(m.created_at);
+                if (Number.isNaN(newCreatedAt) || Number.isNaN(mCreatedAt)) return false;
+                return Math.abs(mCreatedAt - newCreatedAt) < 15000;
+              });
+
+              if (tempIndex !== -1) {
+                const next = [...prev];
+                next[tempIndex] = {
+                  ...newMsg,
+                  sender_type: newMsg.sender_type as 'customer' | 'agent',
+                  message_type: newType,
+                };
+                return next;
+              }
+
+              // Fallback: prevent duplicates by matching media_url + sender_type + type + approximate time
+              const isDuplicate = prev.some(m => {
+                if ((m.media_url || null) !== (newMsg.media_url || null)) return false;
+                if (m.sender_type !== (newMsg.sender_type as any)) return false;
+                if (normalizeType(m.message_type) !== newType) return false;
+
+                const mCreatedAt = Date.parse(m.created_at);
+                if (Number.isNaN(newCreatedAt) || Number.isNaN(mCreatedAt)) return false;
+                return Math.abs(mCreatedAt - newCreatedAt) < 15000;
+              });
               if (isDuplicate) return prev;
-              
-              return [...prev, {
-                ...newMsg,
-                sender_type: newMsg.sender_type as 'customer' | 'agent',
-                message_type: newMsg.message_type || 'text',
-              }];
+
+              return [
+                ...prev,
+                {
+                  ...newMsg,
+                  sender_type: newMsg.sender_type as 'customer' | 'agent',
+                  message_type: newType,
+                },
+              ];
             });
             // Play sound only for customer messages
             if (newMsg.sender_type === 'customer') {
@@ -247,11 +280,13 @@ export function useRealMessages(conversationId: string | null) {
             }
           } else if (payload.eventType === 'UPDATE') {
             const updatedMsg = payload.new as RealMessage;
-            setMessages(prev => prev.map(m => 
-              m.id === updatedMsg.id 
-                ? { ...updatedMsg, sender_type: updatedMsg.sender_type as 'customer' | 'agent' }
-                : m
-            ));
+            setMessages(prev =>
+              prev.map(m =>
+                m.id === updatedMsg.id
+                  ? { ...updatedMsg, sender_type: updatedMsg.sender_type as 'customer' | 'agent' }
+                  : m
+              )
+            );
           }
         }
       )
