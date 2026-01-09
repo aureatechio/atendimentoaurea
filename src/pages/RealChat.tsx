@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRealConversations, useRealMessages, RealConversation, RealMessage } from '@/hooks/useRealConversations';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -60,7 +60,7 @@ export default function RealChat() {
   const [messageToForward, setMessageToForward] = useState<RealMessage | null>(null);
 
   // Build a map of messages by id for quick lookup of quoted messages
-  const messagesById = useCallback(() => {
+  const messagesById = useMemo(() => {
     const map = new Map<string, RealMessage>();
     messages.forEach(m => map.set(m.id, m));
     return map;
@@ -477,7 +477,7 @@ export default function RealChat() {
                         
                         // Get quoted message data if this message is a reply
                         const quotedMsg = msg.reply_to_message_id 
-                          ? messagesById().get(msg.reply_to_message_id) 
+                          ? messagesById.get(msg.reply_to_message_id) 
                           : null;
                         const quotedMessageData: QuotedMessageData | null = quotedMsg ? {
                           id: quotedMsg.id,
