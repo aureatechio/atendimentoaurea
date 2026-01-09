@@ -73,6 +73,12 @@ export function WhatsAppChatInput({ onSendMessage, onSendMedia, disabled, conver
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Z-API limit is 100MB
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error('Arquivo muito grande. Limite da Z-API: 100MB');
+      return;
+    }
+
     setAttachOpen(false);
     setUploading(true);
 
