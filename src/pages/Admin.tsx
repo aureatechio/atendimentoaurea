@@ -451,38 +451,107 @@ export default function Admin() {
     fetchAllData();
   }, []);
 
-  // Realtime subscription for profile online status
+  // Realtime subscription for ALL data changes
   useEffect(() => {
-    const channel = supabase
-      .channel('profiles-online-status')
+    // Channel for profiles online status
+    const profilesChannel = supabase
+      .channel('admin-profiles-realtime')
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE',
+          event: '*',
           schema: 'public',
           table: 'profiles',
         },
         (payload) => {
-          const updatedProfile = payload.new as { user_id: string; is_online: boolean };
-          
-          // Update agents list with new online status
-          setAgents(prev => prev.map(agent => 
-            agent.user_id === updatedProfile.user_id 
-              ? { ...agent, is_online: updatedProfile.is_online }
-              : agent
-          ));
-          
-          // Update stats active agents count
-          setStats(prev => ({
-            ...prev,
-            activeAgents: prev.activeAgents + (updatedProfile.is_online ? 1 : -1)
-          }));
+          console.log('Profile change detected:', payload);
+          if (payload.eventType === 'UPDATE') {
+            const updatedProfile = payload.new as { user_id: string; is_online: boolean; name: string; email: string };
+            const oldProfile = payload.old as { user_id: string; is_online: boolean };
+            
+            // Update agents list with new online status
+            setAgents(prev => {
+              const updated = prev.map(agent => 
+                agent.user_id === updatedProfile.user_id 
+                  ? { ...agent, is_online: updatedProfile.is_online, name: updatedProfile.name, email: updatedProfile.email }
+                  : agent
+              );
+              
+              // Update stats with correct count based on actual agents
+              const onlineCount = updated.filter(a => a.is_online).length;
+              setStats(prevStats => ({
+                ...prevStats,
+                activeAgents: onlineCount
+              }));
+              
+              return updated;
+            });
+          } else {
+            // For INSERT or DELETE, refetch all data
+            fetchAllData();
+          }
+        }
+      )
+      .subscribe();
+
+    // Channel for conversations changes
+    const conversationsChannel = supabase
+      .channel('admin-conversations-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversations',
+        },
+        (payload) => {
+          console.log('Conversation change detected:', payload);
+          // Refetch all data to update stats and charts
+          fetchAllData();
+        }
+      )
+      .subscribe();
+
+    // Channel for messages changes
+    const messagesChannel = supabase
+      .channel('admin-messages-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages',
+        },
+        (payload) => {
+          console.log('Message change detected:', payload);
+          // Refetch all data to update stats and charts
+          fetchAllData();
+        }
+      )
+      .subscribe();
+
+    // Channel for user_roles changes (for pending approvals)
+    const rolesChannel = supabase
+      .channel('admin-roles-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_roles',
+        },
+        (payload) => {
+          console.log('User role change detected:', payload);
+          fetchAllData();
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(profilesChannel);
+      supabase.removeChannel(conversationsChannel);
+      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(rolesChannel);
     };
   }, []);
 
