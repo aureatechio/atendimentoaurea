@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Index from "./pages/Index";
 import WhatsAppSettings from "./pages/WhatsAppSettings";
 import RealChat from "./pages/RealChat";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,11 @@ const App = () => (
             <Route path="/" element={
               <ProtectedRoute>
                 <RealChat />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin" element={
+              <ProtectedRoute requireRole="admin">
+                <Admin />
               </ProtectedRoute>
             } />
             <Route path="/whatsapp" element={
