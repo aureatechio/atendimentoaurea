@@ -14,8 +14,49 @@ export type Database = {
   }
   public: {
     Tables: {
+      conversation_tags: {
+        Row: {
+          applied_at: string
+          applied_by: string | null
+          conversation_id: string
+          id: string
+          tag_id: string
+        }
+        Insert: {
+          applied_at?: string
+          applied_by?: string | null
+          conversation_id: string
+          id?: string
+          tag_id: string
+        }
+        Update: {
+          applied_at?: string
+          applied_by?: string | null
+          conversation_id?: string
+          id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_tags_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
+          assigned_at: string | null
+          assigned_to: string | null
           avatar_url: string | null
           created_at: string
           id: string
@@ -23,10 +64,13 @@ export type Database = {
           last_message_at: string | null
           name: string | null
           phone: string
+          status: string | null
           unread_count: number | null
           updated_at: string
         }
         Insert: {
+          assigned_at?: string | null
+          assigned_to?: string | null
           avatar_url?: string | null
           created_at?: string
           id?: string
@@ -34,10 +78,13 @@ export type Database = {
           last_message_at?: string | null
           name?: string | null
           phone: string
+          status?: string | null
           unread_count?: number | null
           updated_at?: string
         }
         Update: {
+          assigned_at?: string | null
+          assigned_to?: string | null
           avatar_url?: string | null
           created_at?: string
           id?: string
@@ -45,6 +92,7 @@ export type Database = {
           last_message_at?: string | null
           name?: string | null
           phone?: string
+          status?: string | null
           unread_count?: number | null
           updated_at?: string
         }
@@ -110,15 +158,135 @@ export type Database = {
           },
         ]
       }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string
+          id: string
+          is_online: boolean | null
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          is_online?: boolean | null
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          is_online?: boolean | null
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      tag_automation_rules: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean | null
+          tag_id: string
+          trigger_type: string
+          trigger_value: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          tag_id: string
+          trigger_type: string
+          trigger_value?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          tag_id?: string
+          trigger_type?: string
+          trigger_value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tag_automation_rules_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tags: {
+        Row: {
+          color: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_agent: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "supervisor" | "agent"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -245,6 +413,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "supervisor", "agent"],
+    },
   },
 } as const
