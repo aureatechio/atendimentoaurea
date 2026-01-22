@@ -7,7 +7,6 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import Index from "./pages/Index";
-import WhatsAppSettings from "./pages/WhatsAppSettings";
 import RealChat from "./pages/RealChat";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
@@ -31,11 +30,6 @@ const App = () => (
             <Route path="/admin" element={
               <ProtectedRoute requireRole="admin">
                 <Admin />
-              </ProtectedRoute>
-            } />
-            <Route path="/whatsapp" element={
-              <ProtectedRoute>
-                <WhatsAppSettings />
               </ProtectedRoute>
             } />
             <Route path="/real" element={

@@ -1,21 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useZAPIConnection } from '@/hooks/useZAPIConnection';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
-  Loader2, Users, QrCode, BarChart3, CheckCircle2, XCircle, 
+  Loader2, Users, BarChart3, CheckCircle2, 
   UserCheck, UserX, Clock, MessageSquare, ArrowLeft, RefreshCw,
-  Smartphone, History, TrendingUp, TrendingDown, AlertCircle,
-  UserPlus, Settings2, Activity, Zap, Phone, Calendar,
-  LayoutDashboard, UsersRound, Wifi, WifiOff, MoreVertical,
-  ChevronRight, Circle, Eye, Pencil, Trash2
+  TrendingUp, TrendingDown, AlertCircle,
+  UserPlus, Calendar,
+  LayoutDashboard, UsersRound, MoreVertical,
+  Pencil, Trash2
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -93,7 +90,6 @@ interface ChartData {
 
 export default function Admin() {
   const { hasRole, profile } = useAuth();
-  const { status, loading: zapiLoading, qrLoading, checkStatus, getQRCode, disconnect, restart } = useZAPIConnection();
   
   const [activeTab, setActiveTab] = useState('dashboard');
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
@@ -125,8 +121,6 @@ export default function Admin() {
     hourlyActivity: [],
   });
   const [loading, setLoading] = useState(true);
-  const [pollingQR, setPollingQR] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [approvingUser, setApprovingUser] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<Agent | null>(null);
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'delete'>('view');
@@ -555,24 +549,6 @@ export default function Admin() {
     };
   }, []);
 
-  // Poll for QR code
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-
-    if (pollingQR && !status.connected) {
-      interval = setInterval(async () => {
-        const result = await getQRCode();
-        if (result?.connected) {
-          setPollingQR(false);
-        }
-      }, 5000);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [pollingQR, status.connected, getQRCode]);
-
   const handleApproveUser = async (userId: string, role: 'admin' | 'supervisor' | 'agent') => {
     setApprovingUser(userId);
     try {
@@ -592,33 +568,6 @@ export default function Admin() {
     }
   };
 
-  const handleConnect = async () => {
-    setPollingQR(true);
-    await getQRCode();
-  };
-
-  const handleSyncHistory = async () => {
-    setSyncing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('zapi-sync-history', {
-        body: { limit: 50 }
-      });
-
-      if (error) throw error;
-
-      if (data.success) {
-        toast.success(`${data.synced} conversas sincronizadas!`);
-        fetchAllData();
-      } else {
-        toast.error(data.error || 'Erro ao sincronizar');
-      }
-    } catch (err) {
-      console.error('Sync error:', err);
-      toast.error('Erro ao sincronizar histórico');
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   const getRoleLabel = (role: string) => {
     const labels: Record<string, string> = {
@@ -675,16 +624,6 @@ export default function Admin() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Connection Status */}
-            <div className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium",
-              status.connected 
-                ? "bg-emerald-500/20 text-emerald-400" 
-                : "bg-red-500/20 text-red-400"
-            )}>
-              {status.connected ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-              {status.connected ? 'WhatsApp Conectado' : 'Desconectado'}
-            </div>
 
             <Button onClick={fetchAllData} variant="ghost" size="icon" className="text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#30363d]">
               <RefreshCw className="h-4 w-4" />
@@ -706,7 +645,6 @@ export default function Admin() {
             { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
             { id: 'team', label: 'Equipe', icon: UsersRound },
             { id: 'approvals', label: 'Aprovações', icon: UserPlus, badge: stats.pendingApprovals },
-            { id: 'settings', label: 'Configurações', icon: Settings2 },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -896,70 +834,8 @@ export default function Admin() {
                   <HourlyActivityChart data={chartData.hourlyActivity} />
                 </div>
 
-                {/* Quick Actions & Team Overview */}
-                <div className="grid md:grid-cols-2 gap-6">
-                  {/* Quick Actions */}
-                  <Card className="bg-[#161b22] border-[#30363d]">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-[#e6edf3] text-base font-medium flex items-center gap-2">
-                        <Zap className="h-4 w-4 text-yellow-400" />
-                        Ações Rápidas
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <button 
-                        onClick={() => setActiveTab('approvals')}
-                        className="w-full flex items-center justify-between p-3 bg-[#21262d] hover:bg-[#30363d] rounded-lg transition-colors group"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                            <UserPlus className="h-5 w-5 text-purple-400" />
-                          </div>
-                          <div className="text-left">
-                            <p className="text-sm font-medium text-[#e6edf3]">Aprovações Pendentes</p>
-                            <p className="text-xs text-[#8b949e]">{stats.pendingApprovals} usuários aguardando</p>
-                          </div>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-[#8b949e] group-hover:text-[#e6edf3]" />
-                      </button>
-
-                      <button 
-                        onClick={() => setActiveTab('settings')}
-                        className="w-full flex items-center justify-between p-3 bg-[#21262d] hover:bg-[#30363d] rounded-lg transition-colors group"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={cn(
-                            "h-10 w-10 rounded-lg flex items-center justify-center",
-                            status.connected ? "bg-emerald-500/20" : "bg-red-500/20"
-                          )}>
-                            <Phone className={cn("h-5 w-5", status.connected ? "text-emerald-400" : "text-red-400")} />
-                          </div>
-                          <div className="text-left">
-                            <p className="text-sm font-medium text-[#e6edf3]">Conexão WhatsApp</p>
-                            <p className="text-xs text-[#8b949e]">{status.connected ? 'Conectado e funcionando' : 'Desconectado - clique para conectar'}</p>
-                          </div>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-[#8b949e] group-hover:text-[#e6edf3]" />
-                      </button>
-
-                      <button 
-                        onClick={handleSyncHistory}
-                        disabled={syncing}
-                        className="w-full flex items-center justify-between p-3 bg-[#21262d] hover:bg-[#30363d] rounded-lg transition-colors group disabled:opacity-50"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                            {syncing ? <Loader2 className="h-5 w-5 text-blue-400 animate-spin" /> : <History className="h-5 w-5 text-blue-400" />}
-                          </div>
-                          <div className="text-left">
-                            <p className="text-sm font-medium text-[#e6edf3]">Sincronizar Histórico</p>
-                            <p className="text-xs text-[#8b949e]">Importar mensagens do WhatsApp</p>
-                          </div>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-[#8b949e] group-hover:text-[#e6edf3]" />
-                      </button>
-                    </CardContent>
-                  </Card>
+                {/* Team Overview */}
+                <div className="grid md:grid-cols-1 gap-6">
 
                   {/* Team Overview */}
                   <Card className="bg-[#161b22] border-[#30363d]">
@@ -1304,157 +1180,6 @@ export default function Admin() {
                         ))}
                       </div>
                     )}
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            {/* Settings Tab */}
-            {activeTab === 'settings' && (
-              <div className="space-y-6">
-                {/* WhatsApp Connection */}
-                <Card className="bg-[#161b22] border-[#30363d]">
-                  <CardHeader>
-                    <CardTitle className="text-[#e6edf3] flex items-center gap-2">
-                      <Smartphone className="h-5 w-5" />
-                      Conexão WhatsApp
-                    </CardTitle>
-                    <CardDescription className="text-[#8b949e]">
-                      Gerencie a conexão do WhatsApp Business via Z-API
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    {/* Status */}
-                    <div className="flex items-center justify-between p-4 bg-[#21262d] rounded-xl">
-                      <div className="flex items-center gap-4">
-                        <div className={cn(
-                          "h-12 w-12 rounded-xl flex items-center justify-center",
-                          status.connected ? "bg-emerald-500/20" : "bg-red-500/20"
-                        )}>
-                          {status.connected ? (
-                            <CheckCircle2 className="h-6 w-6 text-emerald-400" />
-                          ) : (
-                            <XCircle className="h-6 w-6 text-red-400" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-medium text-[#e6edf3]">
-                            {status.connected ? 'WhatsApp Conectado' : 'WhatsApp Desconectado'}
-                          </p>
-                          <p className="text-sm text-[#8b949e]">
-                            {status.connected ? 'Pronto para enviar e receber mensagens' : 'Escaneie o QR Code para conectar'}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Button 
-                          onClick={checkStatus} 
-                          variant="outline" 
-                          size="sm"
-                          className="border-[#30363d] text-[#e6edf3] hover:bg-[#30363d]"
-                        >
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          Atualizar
-                        </Button>
-                        {status.connected && (
-                          <Button 
-                            onClick={disconnect} 
-                            variant="outline" 
-                            size="sm"
-                            className="border-[#f85149]/50 text-[#f85149] hover:bg-[#f85149]/20"
-                          >
-                            Desconectar
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* QR Code */}
-                    {!status.connected && (
-                      <div className="flex flex-col items-center gap-6 py-6">
-                        {status.qrcode ? (
-                          <>
-                            <div className="bg-white p-4 rounded-xl shadow-lg">
-                              <img 
-                                src={`data:image/png;base64,${status.qrcode}`}
-                                alt="QR Code"
-                                className="w-64 h-64"
-                              />
-                            </div>
-                            <div className="text-center">
-                              <p className="text-sm text-[#e6edf3] mb-1">Escaneie com seu WhatsApp</p>
-                              <p className="text-xs text-[#8b949e]">Configurações → Aparelhos Conectados → Conectar Aparelho</p>
-                            </div>
-                            {pollingQR && (
-                              <div className="flex items-center gap-2 text-sm text-[#8b949e]">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Aguardando conexão...
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <Button 
-                            onClick={handleConnect} 
-                            disabled={qrLoading}
-                            className="bg-[#238636] hover:bg-[#2ea043] text-white px-8"
-                          >
-                            {qrLoading ? (
-                              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Gerando...</>
-                            ) : (
-                              <><QrCode className="h-4 w-4 mr-2" /> Gerar QR Code</>
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Connected Actions */}
-                    {status.connected && (
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <button 
-                          onClick={handleSyncHistory}
-                          disabled={syncing}
-                          className="flex items-center gap-4 p-4 bg-[#21262d] hover:bg-[#30363d] rounded-xl transition-colors disabled:opacity-50 text-left"
-                        >
-                          <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                            {syncing ? <Loader2 className="h-5 w-5 text-blue-400 animate-spin" /> : <History className="h-5 w-5 text-blue-400" />}
-                          </div>
-                          <div>
-                            <p className="font-medium text-[#e6edf3]">Sincronizar Histórico</p>
-                            <p className="text-xs text-[#8b949e]">Importar mensagens antigas</p>
-                          </div>
-                        </button>
-
-                        <button 
-                          onClick={restart}
-                          className="flex items-center gap-4 p-4 bg-[#21262d] hover:bg-[#30363d] rounded-xl transition-colors text-left"
-                        >
-                          <div className="h-10 w-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                            <RefreshCw className="h-5 w-5 text-yellow-400" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-[#e6edf3]">Reiniciar Instância</p>
-                            <p className="text-xs text-[#8b949e]">Resolver problemas de conexão</p>
-                          </div>
-                        </button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Webhook Info */}
-                <Card className="bg-[#161b22] border-[#30363d]">
-                  <CardHeader>
-                    <CardTitle className="text-[#e6edf3] text-sm">Configuração do Webhook</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-xs text-[#8b949e] mb-3">
-                      Configure esta URL no painel da Z-API para receber mensagens em tempo real:
-                    </p>
-                    <code className="block p-4 bg-[#0d1117] rounded-lg text-xs text-[#58a6ff] break-all font-mono">
-                      https://olifecuguxdfzwuzeaox.supabase.co/functions/v1/zapi-webhook
-                    </code>
                   </CardContent>
                 </Card>
               </div>
